@@ -98,7 +98,7 @@ class AS5600Sensor(Sensor):
         except serial.SerialException as e:
             print(f"Warning from AS5600: {e}")
         except ValueError:
-            return None
+            print("Warning from AS5600: Invalid data received.")
         except IndexError:
             print("Warning from AS5600: Index out of range.")
         except Exception as e:
