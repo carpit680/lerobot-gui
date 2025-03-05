@@ -16,10 +16,6 @@ def patch_all_proto_imports(proto_dir):
                 file_path = os.path.join(root, file)
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                # This regex replaces lines like:
-                #   import comm_pb2 as comm__pb2
-                # with:
-                #   from . import comm_pb2 as comm__pb2
                 content_new = re.sub(
                     r"^import (\S+_pb2) as (\S+__pb2)",
                     r"from . import \1 as \2",
@@ -80,7 +76,8 @@ setup(
         "aiortc>=1.0.0",
         "grpcio>=1.44.0",
         "numpy>=1.21.0",
-        "pyserial>=3.5.0"
+        "pyserial>=3.5.0",
+        "zeroconf>=0.146.1"
     ],
     extras_require={
         "dev": [
