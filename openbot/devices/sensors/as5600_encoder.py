@@ -98,7 +98,7 @@ class AS5600Sensor(Sensor):
         except serial.SerialException as e:
             print(f"Warning from AS5600: {e}")
         except ValueError:
-            print("Warning from AS5600: Invalid data received.")
+            return None
         except IndexError:
             print("Warning from AS5600: Index out of range.")
         except Exception as e:
@@ -113,8 +113,6 @@ class AS5600Sensor(Sensor):
             reading = self.read_sensor_data()
             if reading is not None:
                 self._latest_data = reading
-            # Poll at a reasonable rate (e.g., 10 Hz)
-            # time.sleep(0.01)
 
     # --- Methods required by the Sensor interface ---
     def start(self):
