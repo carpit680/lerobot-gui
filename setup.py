@@ -79,7 +79,8 @@ setup(
         "opencv-python>=4.5.0",
         "aiortc>=1.0.0",
         "grpcio>=1.44.0",
-        "numpy>=1.21.0"
+        "numpy>=1.21.0",
+        "pyserial>=3.5.0"
     ],
     extras_require={
         "dev": [

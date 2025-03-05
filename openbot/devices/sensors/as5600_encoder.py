@@ -4,7 +4,7 @@ import time
 from openbot.interfaces.sensor_interface import Sensor
 
 class AS5600Sensor(Sensor):
-    def __init__(self, serial_port='/dev/ttyUSB0', baud_rate=115200):
+    def __init__(self, serial_port='/dev/ttyUSB0', baud_rate=115200, custom_zero=[2330, 845, 3450, 590, 3030, 1330], inversion=[False, False, True, True, True, False], deg=False):
         """
         Initialize the AS5600 sensor class.
 
@@ -14,7 +14,9 @@ class AS5600Sensor(Sensor):
         """
         self.serial_port = serial_port
         self.baud_rate = baud_rate
-        self.custom_zero = [2330, 845, 3450, 590, 3030, 1330]
+        self.custom_zero = custom_zero
+        self.inversion = inversion
+        self.deg = deg
         try:
             self.esp32 = serial.Serial(serial_port, baud_rate, timeout=1)
         except serial.SerialException as e:
@@ -24,6 +26,23 @@ class AS5600Sensor(Sensor):
         self._running = False
         self._thread = None
         print("AS5600 Sensor class has been Initialized")
+
+    def convert_raw_to_radians(self, raw_value, reference):
+        """
+        Convert raw AS5600 value (0-4095) to radians with custom zero.
+
+        Args:
+            raw_value (int): Raw value from the AS5600 sensor.
+            reference (int): Custom zero reference value.
+
+        Returns:
+            float: Angle in radians, normalized to -pi to pi.
+        """
+        adjusted_value = (raw_value - reference + 4096) % 4096
+        radians = (adjusted_value / 4096.0) * 2 * 3.14159
+        radians = (radians + 3.14159) % (2 * 3.14159) - 3.14159
+        # return only 5 digits after decimal
+        return round(radians, 5)
 
     def convert_raw_to_degrees(self, raw_value, reference):
         """
@@ -39,7 +58,7 @@ class AS5600Sensor(Sensor):
         adjusted_value = (raw_value - reference + 4096) % 4096
         degrees = (adjusted_value / 4096.0) * 360.0
         degrees = (degrees + 180) % 360 - 180
-        return degrees
+        return round(degrees, 5)
 
     def map_value(self, x, in_min, in_max, out_min, out_max):
         """
@@ -55,29 +74,34 @@ class AS5600Sensor(Sensor):
         Returns:
             float: Mapped value.
         """
-        return max(out_min, min(out_max, (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min))
+        return round(max(out_min, min(out_max, (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)), 5)
 
     def read_sensor_data(self):
         """
         Read raw sensor data from the ESP32 and return the angles in degrees.
         """
         try:
-            data = self.esp32.readline().decode('utf-8').strip() if self.esp32 else ""
-            if data:
-                raw_values = list(map(int, data.split(",")))
-                angles = [self.convert_raw_to_degrees(raw_values[i], self.custom_zero[i]) for i in range(len(raw_values))]
+            new_data = self.esp32.readline().decode('utf-8').strip() if self.esp32 else ""
+            if new_data:
+                raw_values = list(map(int, new_data.split(",")))
+                if self.deg:
+                    angles = [self.convert_raw_to_degrees(raw_values[i], self.custom_zero[i]) for i in range(len(raw_values))]
+                else:
+                    angles = [self.convert_raw_to_radians(raw_values[i], self.custom_zero[i]) for i in range(len(raw_values))]
                 gripper_value = self.map_value(raw_values[5], 1325, 2808, 0, 25)
                 # Negate some angles as required.
-                sensor_values = [angles[0], angles[1], -angles[2], -angles[3], -angles[4], gripper_value]
+                sensor_values = [angles[i] if not self.inversion[i] else -angles[i] for i in range(len(angles)) ]
+                sensor_values[5] = gripper_value
+                
                 return sensor_values
         except serial.SerialException as e:
-            print(f"Error from AS5600: {e}")
+            print(f"Warning from AS5600: {e}")
         except ValueError:
-            print("Error from AS5600: Invalid data received.")
+            print("Warning from AS5600: Invalid data received.")
         except IndexError:
-            print("Error from AS5600: Index out of range.")
+            print("Warning from AS5600: Index out of range.")
         except Exception as e:
-            print(f"Error from AS5600: {e}")
+            print(f"Warning from AS5600: {e}")
         return None
 
     def _update(self):
@@ -126,14 +150,14 @@ class AS5600Sensor(Sensor):
 
 # Example usage when run as a script.
 if __name__ == "__main__":
-    sensor = AS5600Sensor(serial_port='/dev/ttyUSB0', baud_rate=115200)
+    sensor = AS5600Sensor(serial_port='/dev/tty.usbserial-0001', baud_rate=115200)
     sensor.start()
     try:
         while True:
             data = sensor.get_latest_frame()
             if data is not None:
                 print("Sensor Data:", data)
-            time.sleep(0.5)
+            time.sleep(0.1)
     except KeyboardInterrupt:
         print("\nExiting gracefully...")
     finally:
