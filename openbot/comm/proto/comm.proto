@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package openbot;
+
+message ConnectRequest {}
+
+message ConnectResponse {
+  string message = 1;
+}
+
+message SendMessageRequest {
+  string message = 1;
+}
+
+message SendMessageResponse {}
+
+service CommService {
+  rpc Connect(ConnectRequest) returns (stream ConnectResponse);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+}
