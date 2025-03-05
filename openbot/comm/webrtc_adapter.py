@@ -96,8 +96,9 @@ class WebRTCAdapter(CommInterface):
         Otherwise, connect as a client.
         """
         if self.server_mode:
-            print(f"WebRTCAdapter ({self.role}): Starting TCP signaling server at {self.signaling_host}:{self.signaling_port}...")
-            self._server = await asyncio.start_server(self._handle_server_connection, self.signaling_host, self.signaling_port)
+            # Bind to 0.0.0.0 to accept connections from any interface.
+            print(f"WebRTCAdapter ({self.role}): Starting TCP signaling server at 0.0.0.0:{self.signaling_port}...")
+            self._server = await asyncio.start_server(self._handle_server_connection, "0.0.0.0", self.signaling_port)
             print(f"WebRTCAdapter ({self.role}): Waiting for incoming signaling connection...")
             await self._connection_event.wait()
             print(f"WebRTCAdapter ({self.role}): Received signaling connection from remote peer.")
@@ -107,6 +108,7 @@ class WebRTCAdapter(CommInterface):
             reader, writer = await asyncio.open_connection(self.signaling_host, self.signaling_port)
             print(f"WebRTCAdapter ({self.role}): Connected to signaling server.")
             return TcpSignaling(reader, writer)
+
 
     async def _handle_server_connection(self, reader, writer):
         """
