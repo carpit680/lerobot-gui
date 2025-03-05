@@ -94,7 +94,7 @@ async def sender_main():
                 await adapter.send(sensor_str)
             else:
                 print("Sender: No sensor data available.")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.0333)
     except KeyboardInterrupt:
         print("Sender: Interrupted by user.")
     finally:
