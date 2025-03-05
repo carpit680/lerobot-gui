@@ -4,6 +4,7 @@ import time
 from openbot.interfaces.sensor_interface import Sensor
 
 class AS5600Sensor(Sensor):
+    # TODO@carpit680: make this configurable for any DoF arm
     def __init__(self, serial_port='/dev/ttyUSB0', baud_rate=115200, custom_zero=[2330, 845, 3450, 590, 3030, 1330], inversion=[False, False, True, True, True, False], deg=False):
         """
         Initialize the AS5600 sensor class.
@@ -18,7 +19,7 @@ class AS5600Sensor(Sensor):
         self.inversion = inversion
         self.deg = deg
         try:
-            self.esp32 = serial.Serial(serial_port, baud_rate, timeout=1)
+            self.esp32 = serial.Serial(serial_port, baud_rate, timeout=0.01)
         except serial.SerialException as e:
             print(f"Error initializing serial port: {e}")
             self.esp32 = None
@@ -113,7 +114,7 @@ class AS5600Sensor(Sensor):
             if reading is not None:
                 self._latest_data = reading
             # Poll at a reasonable rate (e.g., 10 Hz)
-            time.sleep(0.1)
+            # time.sleep(0.01)
 
     # --- Methods required by the Sensor interface ---
     def start(self):
@@ -157,7 +158,7 @@ if __name__ == "__main__":
             data = sensor.get_latest_frame()
             if data is not None:
                 print("Sensor Data:", data)
-            time.sleep(0.1)
+            time.sleep(0.01)
     except KeyboardInterrupt:
         print("\nExiting gracefully...")
     finally:
