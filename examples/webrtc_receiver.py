@@ -3,8 +3,8 @@ import asyncio
 from openbot.comm.webrtc_adapter import WebRTCAdapter
 
 async def receiver_main():
-    # Create a WebRTCAdapter with role "answer" in client mode.
-    # This adapter will connect to the sender’s signaling server at localhost:12345.
+    # Create a WebRTC adapter with role "answer" in client mode.
+    # This adapter will connect to the sender's signaling server at localhost:12345.
     adapter = WebRTCAdapter(role="answer", signaling=None,
                             signaling_host="localhost", signaling_port=12345,
                             server_mode=False)
@@ -15,12 +15,12 @@ async def receiver_main():
         print("Receiver: Error during setup_connection:", e)
         return
 
-    # Register a callback to print received sensor data.
+    # Register a callback to continuously print received sensor data.
     def on_message(msg):
         print("Receiver: Received sensor data:", msg)
     adapter.set_on_message(on_message)
-
-    print("Receiver: Listening for sensor data. Press Ctrl+C to stop.")
+    
+    print("Receiver: Now listening for sensor data. Press Ctrl+C to stop.")
     try:
         while True:
             await asyncio.sleep(1)

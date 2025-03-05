@@ -2,7 +2,7 @@
 import asyncio
 import time
 from openbot.devices.sensors.as5600_encoder import AS5600Sensor
-from openbot.comm.webrtc_adapter import WebRTCAdapter
+from openbot.comm.webrtc_adapter import WebRTCAdapter, wait_for_channel_open 
 
 async def sender_main():
     # Initialize and start the AS5600 sensor.
@@ -26,7 +26,7 @@ async def sender_main():
         return
 
     # Wait until the data channel is open.
-    if not await adapter.wait_for_channel_open():
+    if not await wait_for_channel_open(adapter):
         print("Sender: Data channel did not open in time.")
         await adapter.close()
         sensor.stop()

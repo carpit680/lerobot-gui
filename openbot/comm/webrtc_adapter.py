@@ -3,6 +3,24 @@ import json
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from openbot.interfaces.comm_interface import CommInterface
 
+async def wait_for_channel_open(adapter, timeout=5.0):
+    """
+    Wait until the data channel is open or the timeout is reached.
+
+    Args:
+        timeout (float): Maximum number of seconds to wait.
+    Returns:
+        bool: True if the channel opens, False if the timeout is reached.
+    """
+    waited = 0.0
+    interval = 0.1
+    while waited < timeout:
+        if adapter.channel is not None and adapter.channel.readyState == "open":
+            return True
+        await asyncio.sleep(interval)
+        waited += interval
+    return False
+
 class TcpSignaling:
     """
     A simple TCP signaling implementation.
@@ -155,24 +173,6 @@ class WebRTCAdapter(CommInterface):
             callback (function): A function that accepts one argument (the message).
         """
         self.on_message_handler = callback
-
-    async def wait_for_channel_open(self, timeout=5.0):
-        """
-        Wait until the data channel is open or the timeout is reached.
-
-        Args:
-            timeout (float): Maximum number of seconds to wait.
-        Returns:
-            bool: True if the channel opens, False if the timeout is reached.
-        """
-        waited = 0.0
-        interval = 0.1
-        while waited < timeout:
-            if self.channel is not None and self.channel.readyState == "open":
-                return True
-            await asyncio.sleep(interval)
-            waited += interval
-        return False
 
     async def send(self, message):
         """

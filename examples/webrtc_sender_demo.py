@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from aiortc import RTCSessionDescription
 
-from openbot.comm.webrtc_adapter import WebRTCAdapter
+from openbot.comm.webrtc_adapter import WebRTCAdapter, wait_for_channel_open 
 
 # Unified TCP Signaling class used by both sender and responder.
 class TcpSignaling:
@@ -50,17 +50,6 @@ async def get_signaling_connection():
     # Wait until a connection is accepted.
     reader, writer = await _signaling_conn.get()
     return TcpSignaling(reader, writer)
-
-async def wait_for_channel_open(adapter, timeout=5.0):
-    """Wait until the data channel is open or timeout is reached."""
-    waited = 0
-    interval = 0.1
-    while waited < timeout:
-        if adapter.channel is not None and adapter.channel.readyState == "open":
-            return True
-        await asyncio.sleep(interval)
-        waited += interval
-    return False
 
 async def sender_main():
     # Start the TCP signaling server.
