@@ -44,10 +44,11 @@ async def discover_signaling_service(service_type=SERVICE_TYPE):
 async def receiver_main():
     discovery = await discover_signaling_service()
     if not discovery:
-        print("Receiver: Could not find a signaling server. Exiting.")
-        return
-    signaling_address, signaling_port = discovery
-
+        print("Receiver: Could not find a signaling server. Using pre-configured IP.")
+        signaling_address = '192.168.1.20'
+        signaling_port = 12345
+    else:
+        signaling_address, signaling_port = discovery
     adapter = WebRTCAdapter(role="answer", signaling=None,
                             signaling_host=signaling_address,
                             signaling_port=signaling_port,
