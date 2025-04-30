@@ -1,11 +1,12 @@
 import serial
 import threading
 import time
+import numpy as np
 from openbot.interfaces.sensor_interface import Sensor
 
 class AS5600Sensor(Sensor):
     # TODO@carpit680: make this configurable for any DoF arm
-    def __init__(self, serial_port='/dev/ttyUSB0', baud_rate=115200, custom_zero=[2330, 845, 3450, 590, 3030, 1330], inversion=[False, False, True, True, True, False], deg=False):
+    def __init__(self, serial_port='/dev/ttyUSB0', baud_rate=115200, custom_zero=[2330, 845, 3450, 590, 3030, 1330], inversion=[False, False, True, True, True, False], deg=False, median_window=5):
         """
         Initialize the AS5600 sensor class.
 
@@ -26,6 +27,8 @@ class AS5600Sensor(Sensor):
         self._latest_data = None
         self._running = False
         self._thread = None
+        self.median_window = median_window
+        self.median_buffer = np.zeros((self.median_window, 6))
         print("AS5600 Sensor class has been Initialized")
 
     def convert_raw_to_radians(self, raw_value, reference):
@@ -112,7 +115,11 @@ class AS5600Sensor(Sensor):
         while self._running:
             reading = self.read_sensor_data()
             if reading is not None:
-                self._latest_data = reading
+                self.median_buffer = np.roll(self.median_buffer, -1, axis=0)
+                self.median_buffer[-1] = reading
+                # Calculate and store the median for each joint
+                median_reading = np.median(self.median_buffer, axis=0)
+                self._latest_data = median_reading
 
     # --- Methods required by the Sensor interface ---
     def start(self):
