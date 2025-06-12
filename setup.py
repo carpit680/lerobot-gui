@@ -77,7 +77,8 @@ setup(
         "grpcio>=1.44.0",
         "numpy>=1.21.0",
         "pyserial>=3.5.0",
-        "zeroconf>=0.146.1"
+        "zeroconf>=0.146.1",
+        "feetech-servo-sdk>=1.0.0",
     ],
     extras_require={
         "dev": [
