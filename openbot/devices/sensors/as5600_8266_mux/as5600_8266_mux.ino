@@ -5,7 +5,9 @@
 #define TCA9548A_ADDRESS 0x70
 #define AS5600_ADDRESS 0x36
 #define SENSOR_COUNT 6
-const uint8_t mux_channels[SENSOR_COUNT] = {2, 3, 4, 5, 6, 7};
+const uint8_t mux_channels[SENSOR_COUNT] = {7, 6, 5, 4, 3, 2};
+// +1 for normal, -1 for reversed. Change as needed for your hardware.
+const int8_t directions[SENSOR_COUNT] = {1, 1, 1, 1, -1, 1}; // {<shoulder_pan>, <shoulder_lift>, <elbow_lift>, <wrist_lift>, <wrist_roll>, <gripper>}
 
 void tca9548aSelectChannel(uint8_t channel)
 {
@@ -45,18 +47,16 @@ void loop()
         uint16_t rawValue;
         if (readAS5600(rawValue))
         {
-            Serial.print(rawValue);
+            int32_t outputValue = directions[i] * rawValue; // can be negative!
+            Serial.print(outputValue);
         }
         else
         {
             Serial.print("ERR");
         }
-
         if (i < SENSOR_COUNT - 1)
-        {
             Serial.print(",");
-        }
     }
     Serial.println();
-    delay(30);
+    delay(15);
 }
