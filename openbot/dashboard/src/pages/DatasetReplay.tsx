@@ -150,7 +150,7 @@ export default function DatasetReplay() {
         <div className="mx-auto max-w-7xl">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Dataset Replay</h1>
+            <h1 className="text-3xl font-bold text-gray-900 font-heading">Dataset Replay</h1>
             <p className="mt-2 text-gray-600">
               Replay recorded datasets on the follower arm
             </p>
@@ -161,7 +161,7 @@ export default function DatasetReplay() {
             <div className="lg:col-span-2">
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Video Player</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 font-heading">Video Player</h2>
                   {selectedDatasetData && (
                     <div className="text-sm text-gray-600">
                       {selectedDatasetData.name}

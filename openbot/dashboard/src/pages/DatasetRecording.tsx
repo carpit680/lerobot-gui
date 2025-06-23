@@ -168,7 +168,7 @@ export default function DatasetRecording() {
         <div className="mx-auto max-w-7xl">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Dataset Recording</h1>
+            <h1 className="text-3xl font-bold text-gray-900 font-heading">Dataset Recording</h1>
             <p className="mt-2 text-gray-600">
               Record training datasets with multiple camera feeds
             </p>
@@ -179,7 +179,7 @@ export default function DatasetRecording() {
             <div className="lg:col-span-2">
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Camera Feeds</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 font-heading">Camera Feeds</h2>
                   <div className="flex items-center gap-2">
                     <VideoCameraIcon className="h-5 w-5 text-gray-500" />
                     <span className="text-sm text-gray-600">

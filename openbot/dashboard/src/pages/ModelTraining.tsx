@@ -159,7 +159,7 @@ export default function ModelTraining() {
         <div className="mx-auto max-w-7xl">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Model Training</h1>
+            <h1 className="text-3xl font-bold text-gray-900 font-heading">Model Training</h1>
             <p className="mt-2 text-gray-600">
               Train machine learning models with your recorded datasets
             </p>

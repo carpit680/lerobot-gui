@@ -142,7 +142,7 @@ export default function Teleoperation() {
         <div className="mx-auto max-w-7xl">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Teleoperation</h1>
+            <h1 className="text-3xl font-bold text-gray-900 font-heading">Teleoperation</h1>
             <p className="mt-2 text-gray-600">
               Manually control robot arms with real-time camera feedback
             </p>
@@ -153,7 +153,7 @@ export default function Teleoperation() {
             <div className="lg:col-span-2">
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Camera Feed</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 font-heading">Camera Feed</h2>
                   <div className="flex items-center gap-2">
                     <VideoCameraIcon className="h-5 w-5 text-gray-500" />
                     <select

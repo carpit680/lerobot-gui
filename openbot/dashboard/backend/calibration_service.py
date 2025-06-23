@@ -69,13 +69,15 @@ class CalibrationService:
                 command = [
                     "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-m", "lerobot.calibrate",
                     f"--teleop.type={robot_type.lower().replace('Follower', '_follower').replace('Leader', '_leader')}",
-                    f"--teleop.port={port}"
+                    f"--teleop.port={port}",
+                    f"--teleop.id={robot_id}"
                 ]
             else:
                 command = [
                     "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-m", "lerobot.calibrate",
                     f"--robot.type={robot_type.lower().replace('Follower', '_follower').replace('Leader', '_leader')}",
-                    f"--robot.port={port}"
+                    f"--robot.port={port}",
+                    f"--robot.id={robot_id}"
                 ]
             
             # Log the command for debugging

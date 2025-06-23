@@ -77,12 +77,37 @@ export default function Calibration() {
           status: 'pending'
         }
       ]
+    },
+    {
+      id: 'giraffe',
+      name: 'Giraffe v1.1',
+      description: '6-DOF robotic arm',
+      calibrationSteps: [
+        {
+          id: 'connection',
+          name: 'Connect to Robot',
+          description: 'Establish connection to the robot arm',
+          status: 'pending'
+        },
+        {
+          id: 'calibration',
+          name: 'Run Calibration',
+          description: 'Execute the calibration process using LeRobot API',
+          status: 'pending'
+        },
+        {
+          id: 'completion',
+          name: 'Calibration Complete',
+          description: 'Calibration files saved and robot disconnected',
+          status: 'pending'
+        }
+      ]
     }
   ]
 
   const selectedRobotType = robotTypes.find(robot => robot.id === selectedRobot)
   const currentPort = selectedArm === 'leader' ? armConfig.leaderPort : armConfig.followerPort
-  const robotType = selectedArm === 'leader' ? 'so100_leader' : 'so100_follower'
+  const robotType = selectedArm === 'leader' ? `${selectedRobot}_leader` : `${selectedRobot}_follower`
 
   // Check backend connection on component mount
   useEffect(() => {
@@ -453,7 +478,7 @@ export default function Calibration() {
         <div className="mx-auto max-w-6xl">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Arm Calibration</h1>
+            <h1 className="text-3xl font-bold text-gray-900 font-heading">Arm Calibration</h1>
             <p className="mt-2 text-gray-600">
               Calibrate your robot arm using LeRobot framework
             </p>
@@ -472,7 +497,7 @@ export default function Calibration() {
                     <ArrowPathIcon className="h-6 w-6 text-gray-500 animate-spin" />
                   )}
                   <div>
-                    <h3 className={`text-lg font-semibold ${backendConnected === true ? 'text-green-800' : backendConnected === false ? 'text-red-800' : 'text-gray-800'}`}>
+                    <h3 className={`text-lg font-semibold ${backendConnected === true ? 'text-green-800' : backendConnected === false ? 'text-red-800' : 'text-gray-800'} font-heading`}>
                       Backend Connection
                     </h3>
                     <p className={backendConnected === true ? 'text-green-700' : backendConnected === false ? 'text-red-700' : 'text-gray-700'}>
@@ -504,7 +529,7 @@ export default function Calibration() {
           {/* Configuration Section */}
           <div className="mb-8">
             <div className="card">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Calibration Configuration</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 font-heading">Calibration Configuration</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Arm Selection */}
@@ -518,8 +543,8 @@ export default function Calibration() {
                     className="input-field"
                     disabled={isCalibrating}
                   >
-                    <option value="leader">Leader Arm (so100_leader)</option>
-                    <option value="follower">Follower Arm (so100_follower)</option>
+                    <option value="leader">Leader Arm</option>
+                    <option value="follower">Follower Arm</option>
                   </select>
                   <p className="text-sm text-gray-600 mt-1">
                     Port: {currentPort || 'Not configured'}
@@ -576,7 +601,7 @@ export default function Calibration() {
                 <div className="flex items-center gap-3">
                   <ExclamationTriangleIcon className="h-6 w-6 text-red-500" />
                   <div>
-                    <h3 className="text-lg font-semibold text-red-800">Port Not Configured</h3>
+                    <h3 className="text-lg font-semibold text-red-800 font-heading">Port Not Configured</h3>
                     <p className="text-red-700">
                       Please configure the {selectedArm} arm port in the Arm Configuration page before starting calibration.
                     </p>
@@ -593,7 +618,7 @@ export default function Calibration() {
               <div className="mb-6">
                 <div className="card">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900">Calibration Progress</h2>
+                    <h2 className="text-xl font-semibold text-gray-900 font-heading">Calibration Progress</h2>
                     <div className="text-sm text-gray-600">
                       {completedSteps}/{selectedRobotType?.calibrationSteps.length || 0} completed
                     </div>
@@ -623,7 +648,7 @@ export default function Calibration() {
 
               {/* Steps List */}
               <div className="card">
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">Calibration Steps</h2>
+                <h2 className="text-xl font-semibold text-gray-900 mb-6 font-heading">Calibration Steps</h2>
                 
                 <div className="space-y-4">
                   {selectedRobotType?.calibrationSteps.map((step, index) => (

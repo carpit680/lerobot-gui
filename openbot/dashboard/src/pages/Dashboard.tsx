@@ -103,7 +103,7 @@ export default function Dashboard() {
         <div className="mx-auto max-w-7xl">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">LeRobot Dashboard</h1>
+            <h1 className="text-3xl font-bold text-gray-900 font-heading">LeRobot Dashboard</h1>
             <p className="mt-2 text-gray-600">
               Control and monitor your robot arms, record datasets, and train models
             </p>
@@ -111,7 +111,7 @@ export default function Dashboard() {
 
           {/* Stats */}
           <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">System Overview</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 font-heading">System Overview</h2>
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {stats.map((stat) => (
                 <div key={stat.name} className="card">
@@ -125,7 +125,7 @@ export default function Dashboard() {
 
           {/* Quick Actions */}
           <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 font-heading">Quick Actions</h2>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {quickActions.map((action) => (
                 <Link
@@ -151,7 +151,7 @@ export default function Dashboard() {
 
           {/* Recent Activity */}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Activity</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 font-heading">Recent Activity</h2>
             <div className="card">
               <div className="space-y-4">
                 {datasets.length > 0 ? (

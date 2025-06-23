@@ -130,7 +130,7 @@ export default function ArmConfiguration() {
       <div className="px-4 sm:px-6 lg:px-8 py-8">
         <div className="mx-auto max-w-4xl">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Arm Configuration</h1>
+            <h1 className="text-3xl font-bold text-gray-900 font-heading">Arm Configuration</h1>
             <p className="mt-2 text-gray-600">
               Configure the ports for your leader and follower robot arms
             </p>
@@ -143,7 +143,7 @@ export default function ArmConfiguration() {
                   <CogIcon className="h-6 w-6 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Leader Arm</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 font-heading">Leader Arm</h2>
                   <p className="text-sm text-gray-600">Primary control arm</p>
                 </div>
               </div>
@@ -180,7 +180,7 @@ export default function ArmConfiguration() {
                   <CogIcon className="h-6 w-6 text-green-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Follower Arm</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 font-heading">Follower Arm</h2>
                   <p className="text-sm text-gray-600">Secondary controlled arm</p>
                 </div>
               </div>

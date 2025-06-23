@@ -107,7 +107,7 @@ export default function DatasetVisualization() {
         <div className="mx-auto max-w-7xl">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Dataset Visualization</h1>
+            <h1 className="text-3xl font-bold text-gray-900 font-heading">Dataset Visualization</h1>
             <p className="mt-2 text-gray-600">
               Analyze and visualize recorded datasets
             </p>
@@ -117,7 +117,7 @@ export default function DatasetVisualization() {
             {/* Dataset List */}
             <div className="lg:col-span-1">
               <div className="card">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Datasets</h2>
+                <h2 className="text-xl font-semibold text-gray-900 font-heading mb-4">Datasets</h2>
                 
                 <div className="space-y-3">
                   {datasets.length === 0 ? (
@@ -170,7 +170,7 @@ export default function DatasetVisualization() {
                   {/* Dataset Info */}
                   <div className="card">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xl font-semibold text-gray-900">
+                      <h2 className="text-xl font-semibold text-gray-900 font-heading">
                         {datasets.find(d => d.id === selectedDataset)?.name}
                       </h2>
                       <div className="flex items-center gap-2">
