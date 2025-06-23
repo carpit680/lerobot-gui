@@ -50,6 +50,7 @@ export default function Calibration() {
   const [websocket, setWebsocket] = useState<WebSocket | null>(null)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
   const [isSendingInput, setIsSendingInput] = useState(false)
+  const [calibrationSteps, setCalibrationSteps] = useState<CalibrationStep[]>([])
   
   // LeRobot supported robots and their calibration steps
   const robotTypes: RobotType[] = [
@@ -108,6 +109,13 @@ export default function Calibration() {
   const selectedRobotType = robotTypes.find(robot => robot.id === selectedRobot)
   const currentPort = selectedArm === 'leader' ? armConfig.leaderPort : armConfig.followerPort
   const robotType = selectedArm === 'leader' ? `${selectedRobot}_leader` : `${selectedRobot}_follower`
+
+  // Initialize calibration steps when robot type changes
+  useEffect(() => {
+    if (selectedRobotType) {
+      setCalibrationSteps([...selectedRobotType.calibrationSteps])
+    }
+  }, [selectedRobot])
 
   // Check backend connection on component mount
   useEffect(() => {
@@ -169,7 +177,7 @@ export default function Calibration() {
     setCalibrationOutput('')
 
     // Reset all steps to pending
-    selectedRobotType.calibrationSteps.forEach(step => step.status = 'pending')
+    setCalibrationSteps(selectedRobotType.calibrationSteps.map(step => ({ ...step, status: 'pending' as const })))
 
     try {
       // Start calibration via backend
@@ -258,39 +266,67 @@ export default function Calibration() {
         }
         
         // Update step status based on output content
-        if (cleanOutput.includes('Calibration started for')) {
-          if (selectedRobotType && selectedRobotType.calibrationSteps.length > 0) {
-            selectedRobotType.calibrationSteps[0].status = 'in-progress' // Connection step
-            setCurrentStep(0)
-          }
-        } else if (cleanOutput.includes('Move test') && cleanOutput.includes('middle of its range')) {
-          if (selectedRobotType && selectedRobotType.calibrationSteps.length > 1) {
-            selectedRobotType.calibrationSteps[0].status = 'completed' // Connection completed
-            selectedRobotType.calibrationSteps[1].status = 'in-progress' // First calibration step
+        if (calibrationSteps.length > 0) {
+          // Step 0: Connection - Look for connection establishment
+          if (cleanOutput.includes('Connected to robot') || 
+              cleanOutput.includes('Connection established') ||
+              cleanOutput.includes('Robot connected') ||
+              cleanOutput.includes('Starting calibration') ||
+              cleanOutput.includes('Calibration started for')) {
+            setCalibrationSteps(prev => prev.map((step, idx) => 
+              idx === 0 ? { ...step, status: 'completed' as const } : 
+              idx === 1 ? { ...step, status: 'in-progress' as const } : step
+            ))
             setCurrentStep(1)
           }
-        } else if (cleanOutput.includes('Move all joints') && cleanOutput.includes('entire ranges')) {
-          if (selectedRobotType && selectedRobotType.calibrationSteps.length > 2) {
-            // Only advance to step 2 if step 1 was completed
-            if (selectedRobotType.calibrationSteps[1].status === 'completed') {
-              selectedRobotType.calibrationSteps[2].status = 'in-progress' // Second calibration step
-              setCurrentStep(2)
-            }
+          
+          // Step 1: Calibration - Look for calibration progress
+          else if (cleanOutput.includes('Move test') && cleanOutput.includes('middle of its range')) {
+            setCalibrationSteps(prev => prev.map((step, idx) => 
+              idx === 0 ? { ...step, status: 'completed' as const } : 
+              idx === 1 ? { ...step, status: 'in-progress' as const } : step
+            ))
+            setCurrentStep(1)
           }
-        } else if (cleanOutput.includes('Calibration completed successfully') || 
+          else if (cleanOutput.includes('Move all joints') && cleanOutput.includes('entire ranges')) {
+            setCalibrationSteps(prev => prev.map((step, idx) => 
+              idx === 0 ? { ...step, status: 'completed' as const } : 
+              idx === 1 ? { ...step, status: 'in-progress' as const } : step
+            ))
+            setCurrentStep(1)
+          }
+          else if (cleanOutput.includes('Calibration data collected') ||
+                   cleanOutput.includes('Calibration data saved') ||
+                   cleanOutput.includes('Calibration saved to')) {
+            setCalibrationSteps(prev => prev.map((step, idx) => 
+              idx === 1 ? { ...step, status: 'completed' as const } : 
+              idx === 2 ? { ...step, status: 'in-progress' as const } : step
+            ))
+            setCurrentStep(2)
+          }
+          
+          // Step 2: Completion - Look for final completion
+          else if (cleanOutput.includes('Calibration completed successfully') || 
                    cleanOutput.includes('Process finished') ||
                    cleanOutput.includes('Calibration completed!') ||
                    cleanOutput.includes('exit code 0') ||
                    cleanOutput.includes('calibration files saved')) {
-          if (selectedRobotType) {
-            selectedRobotType.calibrationSteps.forEach(step => {
-              if (step.status === 'pending' || step.status === 'in-progress') {
-                step.status = 'completed'
-              }
-            })
-            setCurrentStep(selectedRobotType.calibrationSteps.length - 1)
+            // Mark all steps as completed
+            setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'completed' as const })))
+            setCurrentStep(calibrationSteps.length - 1)
             // Reset waiting state when calibration completes
             setWaitingForUser(false)
+          }
+          
+          // Handle errors
+          else if (cleanOutput.includes('Error') || 
+                   cleanOutput.includes('Failed') ||
+                   cleanOutput.includes('Exception') ||
+                   cleanOutput.includes('exit code 1')) {
+            // Mark current step as failed
+            setCalibrationSteps(prev => prev.map((step, idx) => 
+              idx === currentStep ? { ...step, status: 'failed' as const } : step
+            ))
           }
         }
       } else if (data.type === 'status') {
@@ -298,11 +334,8 @@ export default function Calibration() {
           // Calibration completed
           setIsCalibrating(false)
           setWaitingForUser(false)
-          if (currentStep < selectedRobotType!.calibrationSteps.length) {
-            selectedRobotType!.calibrationSteps.forEach(step => {
-              if (step.status === 'pending') step.status = 'completed'
-            })
-          }
+          setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'completed' as const })))
+          setCurrentStep(calibrationSteps.length - 1)
           toast.success('Calibration completed successfully!')
           
           // Check for calibration files
@@ -386,8 +419,18 @@ export default function Calibration() {
         setCalibrationOutput('[INFO] Enter key sent to calibration process')
         
         // Mark current step as completed when user clicks Continue
-        if (selectedRobotType && selectedRobotType.calibrationSteps[currentStep]) {
-          selectedRobotType.calibrationSteps[currentStep].status = 'completed'
+        setCalibrationSteps(prev => prev.map((step, idx) => {
+          if (idx === currentStep) {
+            return { ...step, status: 'completed' as const }
+          } else if (idx === currentStep + 1) {
+            return { ...step, status: 'in-progress' as const }
+          }
+          return step
+        }))
+        
+        // Advance to next step if available
+        if (currentStep + 1 < calibrationSteps.length) {
+          setCurrentStep(currentStep + 1)
         }
         
         // Add a small delay to prevent rapid clicking
@@ -439,7 +482,7 @@ export default function Calibration() {
       case 'failed':
         return <XCircleIcon className="h-5 w-5 text-red-500" />
       case 'in-progress':
-        return <ArrowPathIcon className="h-5 w-5 text-blue-500 animate-spin" />
+        return <ArrowPathIcon className="h-5 w-5 text-yellow-500 animate-spin" />
       default:
         return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />
     }
@@ -452,9 +495,22 @@ export default function Calibration() {
       case 'failed':
         return 'text-red-600 bg-red-50'
       case 'in-progress':
-        return 'text-blue-600 bg-blue-50'
+        return 'text-yellow-600 bg-yellow-50'
       default:
         return 'text-gray-600 bg-gray-50'
+    }
+  }
+
+  const getStepStatusText = (step: CalibrationStep) => {
+    switch (step.status) {
+      case 'completed':
+        return 'Done'
+      case 'failed':
+        return 'Failed'
+      case 'in-progress':
+        return 'In Progress'
+      default:
+        return 'Pending'
     }
   }
 
@@ -606,18 +662,18 @@ export default function Calibration() {
                   <h2 className="text-xl font-semibold text-gray-900 font-heading">Calibration Steps</h2>
                   {isCalibrating && (
                     <div className="text-sm text-blue-600 font-medium">
-                      Step {currentStep + 1} of {selectedRobotType?.calibrationSteps.length || 0}
+                      Step {currentStep + 1} of {calibrationSteps.length || 0}
                     </div>
                   )}
                 </div>
                 
                 <div className="space-y-4">
-                  {selectedRobotType?.calibrationSteps.map((step, index) => (
+                  {calibrationSteps.map((step, index) => (
                     <div 
                       key={step.id}
                       className={`p-4 rounded-lg border transition-colors ${
                         index === currentStep && step.status === 'in-progress'
-                          ? 'border-blue-300 bg-blue-50 shadow-md'
+                          ? 'border-yellow-300 bg-yellow-50 shadow-md'
                           : index === currentStep && step.status === 'waiting-user'
                           ? 'border-yellow-300 bg-yellow-50 shadow-md'
                           : step.status === 'completed'
@@ -632,17 +688,23 @@ export default function Calibration() {
                         
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
-                            <h3 className={`font-medium ${index === currentStep ? 'text-blue-900' : 'text-gray-900'}`}>
+                            <h3 className={`font-medium ${
+                              step.status === 'completed' 
+                                ? 'text-green-900' 
+                                : index === currentStep && step.status === 'in-progress'
+                                ? 'text-yellow-900'
+                                : 'text-gray-900'
+                            }`}>
                               {step.name}
                               {index === currentStep && step.status === 'in-progress' && (
-                                <span className="ml-2 text-blue-600 text-sm font-normal">(Current)</span>
+                                <span className="ml-2 text-yellow-600 text-sm font-normal">(Current)</span>
                               )}
                               {index === currentStep && step.status === 'waiting-user' && (
                                 <span className="ml-2 text-yellow-600 text-sm font-normal">(Waiting for input)</span>
                               )}
                             </h3>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStepStatus(step)}`}>
-                              {step.status.replace('-', ' ')}
+                              {getStepStatusText(step)}
                             </span>
                           </div>
                           <p className="text-sm text-gray-600 mt-1">{step.description}</p>
