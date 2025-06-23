@@ -21,6 +21,7 @@ export default function ArmConfiguration() {
   const [cameraList, setCameraList] = useState<CameraConfig[]>(cameras)
   const [isScanningCameras, setIsScanningCameras] = useState(false)
   const [streamingCameras, setStreamingCameras] = useState<Set<string>>(new Set())
+  const [streamTimestamps, setStreamTimestamps] = useState<Map<string, number>>(new Map())
 
   useEffect(() => {
     setCameraList(cameras)
@@ -77,6 +78,11 @@ export default function ArmConfiguration() {
           newSet.delete(camera.id)
           return newSet
         })
+        setStreamTimestamps(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(camera.id)
+          return newMap
+        })
         toast.success(`Stopped streaming from ${camera.name}`)
       } catch (error) {
         toast.error(`Failed to stop streaming from ${camera.name}`)
@@ -85,7 +91,10 @@ export default function ArmConfiguration() {
       // Start streaming
       try {
         await fetch(`http://localhost:8000/camera/${cameraIndex}/start`, { method: 'POST' })
+        // Small delay to ensure backend stream is ready
+        await new Promise(resolve => setTimeout(resolve, 500))
         setStreamingCameras(prev => new Set([...prev, camera.id]))
+        setStreamTimestamps(prev => new Map([...prev, [camera.id, Date.now()]]))
         toast.success(`Started streaming from ${camera.name}`)
       } catch (error) {
         toast.error(`Failed to start streaming from ${camera.name}`)
@@ -93,12 +102,30 @@ export default function ArmConfiguration() {
     }
   }
 
+  const stopAllCameraStreams = async () => {
+    const promises = Array.from(streamingCameras).map(async (cameraId) => {
+      const cameraIndex = cameraId.replace('camera', '')
+      try {
+        await fetch(`http://localhost:8000/camera/${cameraIndex}/stop`, { method: 'DELETE' })
+      } catch (error) {
+        console.error(`Failed to stop camera ${cameraIndex}:`, error)
+      }
+    })
+    await Promise.all(promises)
+    setStreamingCameras(new Set())
+    setStreamTimestamps(new Map())
+  }
+
   const handleScanCameras = async () => {
     setIsScanningCameras(true)
     try {
+      // Stop all camera streams before scanning
+      await stopAllCameraStreams()
+      
       const response = await fetch('http://localhost:8000/scan-cameras')
       if (!response.ok) throw new Error('Failed to scan cameras')
       const data = await response.json()
+      
       // Map backend cameras to CameraConfig
       const scannedCameras: CameraConfig[] = (data.cameras || []).map((cam: any) => ({
         id: cam.id,
@@ -106,7 +133,22 @@ export default function ArmConfiguration() {
         url: `/video/camera/${cam.index}`,
         enabled: true,
       }))
-      setCameras(scannedCameras)
+      
+      // Merge with existing cameras, preserving states
+      const existingCameras = new Map(cameraList.map(cam => [cam.id, cam]))
+      const mergedCameras = scannedCameras.map(scannedCam => {
+        const existing = existingCameras.get(scannedCam.id)
+        if (existing) {
+          // Preserve existing enabled state and streaming state
+          return {
+            ...scannedCam,
+            enabled: existing.enabled,
+          }
+        }
+        return scannedCam
+      })
+      
+      setCameras(mergedCameras)
       toast.success('Cameras scanned')
     } catch (e) {
       toast.error('Failed to scan cameras')
@@ -281,7 +323,8 @@ export default function ArmConfiguration() {
                       {camera.enabled && streamingCameras.has(camera.id) && (
                         <div className="mt-2">
                           <img
-                            src={`http://localhost:8000${camera.url}`}
+                            key={`${camera.id}-${streamTimestamps.get(camera.id) || 0}`}
+                            src={`http://localhost:8000${camera.url}?t=${streamTimestamps.get(camera.id) || Date.now()}`}
                             className="w-full rounded border"
                             style={{ maxHeight: 180 }}
                             alt={`${camera.name} preview`}
