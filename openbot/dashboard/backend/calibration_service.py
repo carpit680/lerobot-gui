@@ -181,7 +181,6 @@ class CalibrationService:
                                 if line:
                                     # Clean ANSI escape codes
                                     line = clean_ansi_codes(line)
-                                    logger.info(f"PTY Output from {session_id}: {line}")
                                     
                                     # Check if this is a traceback or error
                                     if "traceback" in line.lower() or "error" in line.lower() or "exception" in line.lower():
@@ -214,7 +213,6 @@ class CalibrationService:
                                     if any(phrase in line_lower for phrase in [
                                         "press enter....", "press enter to stop", "press enter to continue"
                                     ]):
-                                        logger.info(f"Detected explicit waiting for input in {session_id}: '{line}'")
                                         self.active_sessions[session_id]["waiting_for_input"] = True
                                         self._calibration_phases[session_id] = "waiting"
                             
@@ -281,25 +279,21 @@ class CalibrationService:
     
     def _add_output(self, session_id: str, message: str):
         """
-        Add output message to the session queue
+        Add output message to the session's queue
         """
         if session_id in self.output_queues:
-            timestamp = datetime.now().isoformat()
-            output_data = {
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            self.output_queues[session_id].put({
                 "timestamp": timestamp,
                 "message": message
-            }
-            self.output_queues[session_id].put(output_data)
+            })
             
-            # Check if session still exists before updating it
+            # Also store in session data for debugging
             if session_id in self.active_sessions:
-                self.active_sessions[session_id]["output"].append(message)
-                queue_size = self.output_queues[session_id].qsize()
-                logger.info(f"Added output to queue for {session_id} at {timestamp}: {message[:100]}{'...' if len(message) > 100 else ''} (queue size: {queue_size})")
-            else:
-                logger.warning(f"Session {session_id} was cleaned up, skipping output update")
-        else:
-            logger.error(f"No output queue found for {session_id}")
+                self.active_sessions[session_id]["output"].append({
+                    "timestamp": timestamp,
+                    "message": message
+                })
     
     async def send_input(self, session_id: str, input_data: str = "\n") -> bool:
         """

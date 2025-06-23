@@ -178,10 +178,8 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
             # Get all available output messages at once
             outputs = await calibration_service.get_all_output(session_id)
             if outputs:
-                print(f"Retrieved {len(outputs)} outputs for {session_id}")
                 for output in outputs:
                     message_count += 1
-                    print(f"Sending output #{message_count} to WebSocket for {session_id}: {output}")
                     try:
                         await websocket.send_text(json.dumps({
                             "type": "output",
