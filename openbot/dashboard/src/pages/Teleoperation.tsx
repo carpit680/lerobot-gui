@@ -92,7 +92,7 @@ export default function Teleoperation() {
       const result = await response.json()
       setSessionId(result.session_id)
       startWebSocketConnection(result.session_id)
-      toast.success('Teleoperation started')
+    toast.success('Teleoperation started')
     } catch (error) {
       toast.error('Failed to start teleoperation')
       setIsTeleoperating(false)
@@ -104,7 +104,7 @@ export default function Teleoperation() {
     if (!sessionId) return
     try {
       await fetch(`${BACKEND_URL}/teleop/stop/${sessionId}`, { method: 'DELETE' })
-      setIsTeleoperating(false)
+    setIsTeleoperating(false)
       setIsRunning(false)
       setSessionId('')
       setOutput([])
@@ -112,7 +112,7 @@ export default function Teleoperation() {
         websocket.close()
         setWebsocket(null)
       }
-      toast.success('Teleoperation stopped')
+    toast.success('Teleoperation stopped')
     } catch {
       toast.error('Failed to stop teleoperation')
     }
@@ -137,8 +137,8 @@ export default function Teleoperation() {
         }
       } else if (data.type === 'error') {
         toast.error(`Teleoperation error: ${data.data}`)
-      }
     }
+  }
     ws.onerror = () => {
       toast.error('WebSocket error')
     }
@@ -229,14 +229,14 @@ export default function Teleoperation() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Leader Arm ID</label>
-                  <input
+                        <input
                     type="text"
                     value={leaderId}
                     onChange={e => setLeaderId(e.target.value)}
                     className="input-field"
                     disabled={isTeleoperating}
-                  />
-                </div>
+                        />
+                      </div>
                 {/* Follower Config */}
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Follower Arm Type</label>
@@ -266,7 +266,7 @@ export default function Teleoperation() {
                     className="input-field"
                     disabled={isTeleoperating}
                   />
-                </div>
+                  </div>
                 <div className="flex gap-4 mt-4">
                   <button
                     onClick={startTeleoperation}

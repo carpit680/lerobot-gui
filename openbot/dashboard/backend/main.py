@@ -7,6 +7,14 @@ import asyncio
 import logging
 from calibration_service import calibration_service
 from teleoperation_service import teleoperation_service
+import cv2
+from fastapi.responses import StreamingResponse
+import threading
+from fastapi import Response
+import time
+
+# Global camera stream tracking
+active_camera_streams = {}
 
 # Configure logging to suppress access logs for health checks
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
@@ -158,6 +166,87 @@ async def detect_ports():
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to detect ports: {str(e)}")
+
+@app.get("/scan-cameras")
+async def scan_cameras():
+    """
+    Scan for available camera devices (USB or built-in) using OpenCV.
+    Returns a list of camera indices and suggested names.
+    """
+    cameras = []
+    for idx in range(10):  # Scan indices 0-9
+        cap = cv2.VideoCapture(idx)
+        if cap is not None and cap.isOpened():
+            cameras.append({
+                "id": f"camera{idx}",
+                "name": f"Camera {idx}",
+                "index": idx,
+                "url": f"/video/camera/{idx}",  # This is a placeholder; frontend can use index
+            })
+            cap.release()
+    return {"cameras": cameras}
+
+def mjpeg_stream_generator(index):
+    cap = cv2.VideoCapture(index)
+    if not cap.isOpened():
+        print(f"Failed to open camera {index}")
+        return
+    
+    # Get camera's native resolution
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    print(f"Started MJPEG stream for camera {index} at {width}x{height}")
+    
+    # Store the capture object globally
+    active_camera_streams[index] = cap
+    
+    try:
+        while index in active_camera_streams:  # Check if stream is still active
+            ret, frame = cap.read()
+            if not ret:
+                print(f"Failed to read frame from camera {index}")
+                continue
+            
+            # Use native camera resolution
+            frame = cv2.resize(frame, (width, height))
+            
+            ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if not ret:
+                print(f"Failed to encode frame from camera {index}")
+                continue
+            
+            frame_bytes = jpeg.tobytes()
+            
+            # Simpler MJPEG format that browsers handle better
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            
+            # Small delay to control frame rate
+            time.sleep(0.033)  # ~30 FPS
+            
+    except Exception as e:
+        print(f"Error in MJPEG stream for camera {index}: {e}")
+    finally:
+        if index in active_camera_streams:
+            del active_camera_streams[index]
+        cap.release()
+        print(f"Stopped MJPEG stream for camera {index}")
+
+@app.get("/video/camera/{index}")
+async def video_camera(index: int, response: Response):
+    """
+    MJPEG video stream from the specified camera index.
+    """
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "close"
+    
+    return StreamingResponse(
+        mjpeg_stream_generator(index), 
+        media_type='multipart/x-mixed-replace; boundary=frame'
+    )
 
 # WebSocket endpoint for real-time output streaming
 @app.websocket("/ws/calibration/{session_id}")
@@ -339,6 +428,38 @@ async def websocket_teleoperation(websocket: WebSocket, session_id: str):
             await websocket.close()
         except Exception:
             pass
+
+@app.post("/camera/{index}/start")
+async def start_camera_stream(index: int):
+    """Start streaming from a specific camera"""
+    if index in active_camera_streams:
+        return {"success": True, "message": f"Camera {index} stream already active"}
+    
+    # Test if camera can be opened
+    cap = cv2.VideoCapture(index)
+    if not cap.isOpened():
+        return {"success": False, "message": f"Camera {index} not available"}
+    cap.release()
+    
+    return {"success": True, "message": f"Camera {index} stream started"}
+
+@app.delete("/camera/{index}/stop")
+async def stop_camera_stream(index: int):
+    """Stop streaming from a specific camera and release it"""
+    if index in active_camera_streams:
+        cap = active_camera_streams[index]
+        cap.release()
+        del active_camera_streams[index]
+        print(f"Released camera {index}")
+        return {"success": True, "message": f"Camera {index} stream stopped and released"}
+    else:
+        return {"success": False, "message": f"Camera {index} stream not active"}
+
+@app.get("/camera/{index}/status")
+async def get_camera_status(index: int):
+    """Get the status of a camera stream"""
+    is_active = index in active_camera_streams
+    return {"camera_index": index, "is_streaming": is_active}
 
 if __name__ == "__main__":
     import uvicorn

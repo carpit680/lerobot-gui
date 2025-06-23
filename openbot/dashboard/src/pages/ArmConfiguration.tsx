@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast'
 import {
   CogIcon,
 } from '@heroicons/react/24/outline'
+import { CameraConfig } from '../store/lerobotStore'
 
 interface UsbPort {
   path: string
@@ -13,9 +14,17 @@ interface UsbPort {
 }
 
 export default function ArmConfiguration() {
-  const { armConfig, setArmConfig } = useLeRobotStore()
+  const { armConfig, setArmConfig, cameras, setCameras, toggleCamera } = useLeRobotStore()
   const [usbPorts, setUsbPorts] = useState<UsbPort[]>([])
   const [isScanning, setIsScanning] = useState(false)
+  // Camera management state
+  const [cameraList, setCameraList] = useState<CameraConfig[]>(cameras)
+  const [isScanningCameras, setIsScanningCameras] = useState(false)
+  const [streamingCameras, setStreamingCameras] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    setCameraList(cameras)
+  }, [cameras])
 
   // Scan for USB ports
   const scanUsbPorts = async () => {
@@ -49,6 +58,61 @@ export default function ArmConfiguration() {
       [`${armType}Port`]: port
     })
     toast.success(`${armType.charAt(0).toUpperCase() + armType.slice(1)} arm port set to ${port}`)
+  }
+
+  const handleToggleCamera = (id: string) => {
+    toggleCamera(id)
+  }
+
+  const handleToggleStreaming = async (camera: CameraConfig) => {
+    const cameraIndex = camera.id.replace('camera', '')
+    const isCurrentlyStreaming = streamingCameras.has(camera.id)
+    
+    if (isCurrentlyStreaming) {
+      // Stop streaming
+      try {
+        await fetch(`http://localhost:8000/camera/${cameraIndex}/stop`, { method: 'DELETE' })
+        setStreamingCameras(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(camera.id)
+          return newSet
+        })
+        toast.success(`Stopped streaming from ${camera.name}`)
+      } catch (error) {
+        toast.error(`Failed to stop streaming from ${camera.name}`)
+      }
+    } else {
+      // Start streaming
+      try {
+        await fetch(`http://localhost:8000/camera/${cameraIndex}/start`, { method: 'POST' })
+        setStreamingCameras(prev => new Set([...prev, camera.id]))
+        toast.success(`Started streaming from ${camera.name}`)
+      } catch (error) {
+        toast.error(`Failed to start streaming from ${camera.name}`)
+      }
+    }
+  }
+
+  const handleScanCameras = async () => {
+    setIsScanningCameras(true)
+    try {
+      const response = await fetch('http://localhost:8000/scan-cameras')
+      if (!response.ok) throw new Error('Failed to scan cameras')
+      const data = await response.json()
+      // Map backend cameras to CameraConfig
+      const scannedCameras: CameraConfig[] = (data.cameras || []).map((cam: any) => ({
+        id: cam.id,
+        name: cam.name,
+        url: `/video/camera/${cam.index}`,
+        enabled: true,
+      }))
+      setCameras(scannedCameras)
+      toast.success('Cameras scanned')
+    } catch (e) {
+      toast.error('Failed to scan cameras')
+    } finally {
+      setIsScanningCameras(false)
+    }
   }
 
   return (
@@ -160,6 +224,81 @@ export default function ArmConfiguration() {
                 {usbPorts.length === 0 && (
                   <p className="text-orange-600">• No USB devices currently detected. Please connect your arms and refresh.</p>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Camera Configuration Section */}
+          <div className="mt-8">
+            <div className="card">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Camera Configuration</h3>
+              <div className="space-y-4">
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleScanCameras}
+                    className="btn-primary px-4 py-2 rounded disabled:opacity-50"
+                    disabled={isScanningCameras}
+                  >
+                    {isScanningCameras ? 'Scanning...' : 'Scan Cameras'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                  {cameraList.length === 0 && (
+                    <div className="text-gray-500 col-span-2">No cameras configured.</div>
+                  )}
+                  {cameraList.map((camera) => (
+                    <div key={camera.id} className="border rounded-lg p-4 flex flex-col gap-2 bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium text-gray-900">{camera.name}</div>
+                      </div>
+                      <div className="text-xs text-gray-600 break-all">{camera.url}</div>
+                      <div className="flex items-center gap-4 mt-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={camera.enabled}
+                            onChange={() => handleToggleCamera(camera.id)}
+                            id={`toggle-${camera.id}`}
+                          />
+                          <label htmlFor={`toggle-${camera.id}`} className="text-sm text-gray-700">
+                            Enabled
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={streamingCameras.has(camera.id)}
+                            onChange={() => handleToggleStreaming(camera)}
+                            id={`stream-${camera.id}`}
+                            disabled={!camera.enabled}
+                          />
+                          <label htmlFor={`stream-${camera.id}`} className="text-sm text-gray-700">
+                            Stream
+                          </label>
+                        </div>
+                      </div>
+                      {/* Only show video preview if enabled and streaming */}
+                      {camera.enabled && streamingCameras.has(camera.id) && (
+                        <div className="mt-2">
+                          <img
+                            src={`http://localhost:8000${camera.url}`}
+                            className="w-full rounded border"
+                            style={{ maxHeight: 180 }}
+                            alt={`${camera.name} preview`}
+                            onError={(e) => {
+                              console.error('Image error for camera:', camera.id, e);
+                              e.currentTarget.style.display = 'none';
+                            }}
+                            onLoad={() => console.log('Image loaded for camera:', camera.id)}
+                          />
+                          <div className="text-xs text-gray-500 mt-1">
+                            Camera stream
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

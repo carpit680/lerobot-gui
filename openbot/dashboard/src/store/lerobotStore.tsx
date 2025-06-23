@@ -82,11 +82,7 @@ export const useLeRobotStore = create<LeRobotState>((set) => ({
   })),
   
   // Cameras
-  cameras: [
-    { id: 'camera1', name: 'Front Camera', url: 'http://localhost:8080/stream.mjpg', enabled: true },
-    { id: 'camera2', name: 'Side Camera', url: 'http://localhost:8081/stream.mjpg', enabled: false },
-    { id: 'camera3', name: 'Top Camera', url: 'http://localhost:8082/stream.mjpg', enabled: false },
-  ],
+  cameras: [],
   setCameras: (cameras) => set({ cameras }),
   toggleCamera: (id) => set((state) => ({
     cameras: state.cameras.map(camera => 
