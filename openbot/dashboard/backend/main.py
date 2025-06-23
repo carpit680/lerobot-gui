@@ -179,6 +179,18 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
                         "type": "output",
                         "data": output.strip()
                     }))
+                    
+                    # Check if this output indicates completion
+                    if "Calibration completed successfully" in output or "Calibration saved to" in output:
+                        # Double-check if process is really finished
+                        is_running = await calibration_service.is_running(session_id)
+                        if not is_running:
+                            print(f"Process confirmed finished for {session_id} after completion output")
+                            await websocket.send_text(json.dumps({
+                                "type": "status",
+                                "data": {"is_running": False, "status": "finished"}
+                            }))
+                            break
             
             # Wait a bit before checking again (reduced delay for more responsive output)
             await asyncio.sleep(0.01)

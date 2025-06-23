@@ -39,9 +39,11 @@ def clean_ansi_codes(text: str) -> str:
 
 class CalibrationService:
     def __init__(self):
-        self.active_sessions: Dict[str, Dict[str, Any]] = {}
-        self.output_queues: Dict[str, queue.Queue] = {}
-        self.active_processes: Dict[str, Any] = {}  # Will store (pid, master_fd, slave_fd)
+        self.active_sessions = {}   # session_id -> session_data
+        self.output_queues = {}     # session_id -> Queue
+        self.active_processes = {}  # session_id -> (process, master_fd)
+        self._calibration_phases = {}  # session_id -> current_phase
+        self.cancelled_sessions = set()  # Track cancelled sessions
     
     async def start_calibration(self, arm_type: str, robot_type: str, port: str, robot_id: str) -> str:
         """
@@ -49,6 +51,14 @@ class CalibrationService:
         """
         try:
             session_id = f"{robot_id}_{arm_type}"
+            
+            # Clean up any existing session with the same ID
+            if session_id in self.active_processes:
+                logger.warning(f"Session {session_id} already exists, cleaning up")
+                await self.stop_calibration(session_id)
+            
+            # Remove from cancelled sessions if it was there
+            self.cancelled_sessions.discard(session_id)
             
             # Create output queue for this session
             self.output_queues[session_id] = queue.Queue()
@@ -236,20 +246,38 @@ class CalibrationService:
             
             # Process has finished
             if process.poll() == 0:
-                self.active_sessions[session_id]["status"] = "completed"
-                self._add_output(session_id, "Calibration completed successfully!")
-                logger.info(f"Calibration completed successfully for {session_id}")
+                # Check if session was cancelled by user
+                if session_id in self.cancelled_sessions:
+                    self._add_output(session_id, "Calibration cancelled by user")
+                    logger.info(f"Calibration cancelled by user for {session_id}")
+                else:
+                    # Update session status to completed
+                    if session_id in self.active_sessions:
+                        self.active_sessions[session_id]["status"] = "completed"
+                    self._add_output(session_id, "Calibration completed successfully!")
+                    logger.info(f"Calibration completed successfully for {session_id}")
             else:
-                self.active_sessions[session_id]["status"] = "failed"
-                self._add_output(session_id, f"Calibration failed with exit code {process.poll()}")
-                logger.error(f"Calibration failed for {session_id} with exit code {process.poll()}")
+                # Check if session was cancelled by user
+                if session_id in self.cancelled_sessions:
+                    self._add_output(session_id, "Calibration cancelled by user")
+                    logger.info(f"Calibration cancelled by user for {session_id}")
+                else:
+                    if session_id in self.active_sessions:
+                        self.active_sessions[session_id]["status"] = "failed"
+                    self._add_output(session_id, f"Calibration failed with exit code {process.poll()}")
+                    logger.error(f"Calibration failed for {session_id} with exit code {process.poll()}")
                 
         except Exception as e:
             error_msg = f"Calibration monitoring error: {str(e)}"
             logger.error(f"Calibration error for {session_id}: {e}")
-            self._add_output(session_id, error_msg)
-            self.active_sessions[session_id]["status"] = "failed"
-            self.active_sessions[session_id]["error"] = str(e)
+            
+            # Check if session still exists before trying to update it
+            if session_id in self.active_sessions:
+                self._add_output(session_id, error_msg)
+                self.active_sessions[session_id]["status"] = "failed"
+                self.active_sessions[session_id]["error"] = str(e)
+            else:
+                logger.warning(f"Session {session_id} was already cleaned up, skipping status update")
     
     def _add_output(self, session_id: str, message: str):
         """
@@ -262,9 +290,14 @@ class CalibrationService:
                 "message": message
             }
             self.output_queues[session_id].put(output_data)
-            self.active_sessions[session_id]["output"].append(message)
-            queue_size = self.output_queues[session_id].qsize()
-            logger.info(f"Added output to queue for {session_id} at {timestamp}: {message[:100]}{'...' if len(message) > 100 else ''} (queue size: {queue_size})")
+            
+            # Check if session still exists before updating it
+            if session_id in self.active_sessions:
+                self.active_sessions[session_id]["output"].append(message)
+                queue_size = self.output_queues[session_id].qsize()
+                logger.info(f"Added output to queue for {session_id} at {timestamp}: {message[:100]}{'...' if len(message) > 100 else ''} (queue size: {queue_size})")
+            else:
+                logger.warning(f"Session {session_id} was cleaned up, skipping output update")
         else:
             logger.error(f"No output queue found for {session_id}")
     
@@ -380,18 +413,36 @@ class CalibrationService:
         """
         try:
             if session_id not in self.active_processes:
+                logger.warning(f"No active process found for {session_id}")
                 return False
+            
+            # Mark session as cancelled
+            self.cancelled_sessions.add(session_id)
+            logger.info(f"Marked session {session_id} as cancelled")
             
             process, master_fd = self.active_processes[session_id]
             if process.poll() is None:  # Process is still running
+                logger.info(f"Terminating process for {session_id}")
                 process.terminate()
-                process.wait(timeout=5)
+                
+                # Wait for graceful termination
+                try:
+                    process.wait(timeout=5)
+                except:
+                    # If graceful termination fails, force kill
+                    logger.warning(f"Force killing process for {session_id}")
+                    process.kill()
+                    process.wait(timeout=2)
             
-            # Clean up
+            # Clean up all session data
             if session_id in self.active_processes:
                 del self.active_processes[session_id]
             if session_id in self.output_queues:
                 del self.output_queues[session_id]
+            if session_id in self.active_sessions:
+                del self.active_sessions[session_id]
+            if hasattr(self, '_calibration_phases') and session_id in self._calibration_phases:
+                del self._calibration_phases[session_id]
             
             logger.info(f"Stopped calibration process for {session_id}")
             return True

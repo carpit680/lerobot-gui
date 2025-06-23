@@ -9,6 +9,7 @@ import {
   CommandLineIcon,
   PlayIcon,
   StopIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 
 // Extend Window interface for global variable
@@ -23,7 +24,8 @@ interface CalibrationStep {
   id: string
   name: string
   description: string
-  status: 'pending' | 'in-progress' | 'completed' | 'failed'
+  status: 'pending' | 'in-progress' | 'completed' | 'failed' | 'waiting-user'
+  userPrompt?: string
 }
 
 interface RobotType {
@@ -51,6 +53,8 @@ export default function Calibration() {
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
   const [isSendingInput, setIsSendingInput] = useState(false)
   const [calibrationSteps, setCalibrationSteps] = useState<CalibrationStep[]>([])
+  const [isCancelled, setIsCancelled] = useState(false)
+  const monitoringIntervalRef = useRef<number | null>(null)
   
   // LeRobot supported robots and their calibration steps
   const robotTypes: RobotType[] = [
@@ -145,6 +149,11 @@ export default function Calibration() {
     console.log('Backend connected state changed to:', backendConnected)
   }, [backendConnected])
 
+  // Debug: Log when calibration state changes
+  useEffect(() => {
+    console.log('Calibration state changed - isCalibrating:', isCalibrating, 'waitingForUser:', waitingForUser)
+  }, [isCalibrating, waitingForUser])
+
   const checkBackendConnection = async () => {
     try {
       console.log('Checking backend connection...')
@@ -187,6 +196,7 @@ export default function Calibration() {
     setIsCalibrating(true)
     setCurrentStep(0)
     setCalibrationOutput('')
+    setIsCancelled(false)
 
     // Reset all steps to pending
     setCalibrationSteps(selectedRobotType.calibrationSteps.map(step => ({ ...step, status: 'pending' as const })))
@@ -218,7 +228,7 @@ export default function Calibration() {
       startWebSocketConnection(result.session_id)
 
       // Start monitoring the calibration process
-      monitorCalibrationProcess(result.session_id)
+      // monitorCalibrationProcess(result.session_id)
 
     } catch (error) {
       console.error('Calibration start failed:', error)
@@ -250,6 +260,7 @@ export default function Calibration() {
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      console.log('WebSocket message received:', data)
       
       if (data.type === 'output') {
         // Clean up the output for better display
@@ -274,6 +285,15 @@ export default function Calibration() {
           console.log('Calibration waiting for user input:', cleanOutput)
           setWaitingForUser(true)
         } else {
+          // Clear waiting state if we see completion messages
+          if (cleanOutput.includes('Calibration completed successfully') || 
+              cleanOutput.includes('Process finished') ||
+              cleanOutput.includes('Calibration completed!') ||
+              cleanOutput.includes('exit code 0') ||
+              cleanOutput.includes('calibration files saved') ||
+              cleanOutput.includes('Calibration saved to')) {
+            setWaitingForUser(false)
+          }
           console.log('No waiting detected in output:', cleanOutput)
         }
         
@@ -319,9 +339,16 @@ export default function Calibration() {
                    cleanOutput.includes('Calibration completed!') ||
                    cleanOutput.includes('exit code 0') ||
                    cleanOutput.includes('calibration files saved')) {
-            // Mark all steps as completed
-            setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'completed' as const })))
-            setCurrentStep(calibrationSteps.length - 1)
+            // Check if this was a cancellation
+            if (cleanOutput.includes('Calibration cancelled by user')) {
+              // Don't mark steps as completed for cancellation
+              setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'failed' as const })))
+              setCurrentStep(0)
+            } else {
+              // Mark all steps as completed for successful completion
+              setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'completed' as const })))
+              setCurrentStep(calibrationSteps.length - 1)
+            }
             // Reset waiting state when calibration completes
             setWaitingForUser(false)
           }
@@ -338,14 +365,27 @@ export default function Calibration() {
           }
         }
       } else if (data.type === 'status') {
+        console.log('WebSocket status message:', data.data, 'isCancelled:', isCancelled)
         if (data.data.status === 'finished') {
-          // Calibration completed
+          console.log('Process finished, checking if cancelled...')
+          console.log('Before state update - isCalibrating:', isCalibrating, 'waitingForUser:', waitingForUser)
           setIsCalibrating(false)
           setWaitingForUser(false)
-          setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'completed' as const })))
-          setCurrentStep(calibrationSteps.length - 1)
-          toast.success('Calibration completed successfully!')
-          
+          console.log('State update commands sent')
+      
+          // Check if this was a cancellation by looking at the output or cancellation flag
+          if (isCancelled || calibrationOutput.includes('Calibration cancelled by user')) {
+            console.log('Calibration was cancelled, not showing success toast')
+            setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'failed' as const })))
+            setCurrentStep(0)
+            // Don't show success toast for cancellation
+          } else {
+            console.log('Calibration completed successfully, showing toast')
+            setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'completed' as const })))
+            setCurrentStep(calibrationSteps.length - 1)
+            toast.success('Calibration completed successfully!')
+          }
+      
           // Check for calibration files
           checkCalibrationFiles()
         }
@@ -380,9 +420,21 @@ export default function Calibration() {
           setWaitingForUser(isWaiting)
           
           if (!status.is_running && isCalibrating) {
+            console.log('Monitor detected process finished, cleaning up...')
             setIsCalibrating(false)
             setWaitingForUser(false)
-            toast.success('Calibration completed!')
+            
+            // Clear the monitoring interval
+            if (monitoringIntervalRef.current) {
+              clearInterval(monitoringIntervalRef.current)
+              monitoringIntervalRef.current = null
+            }
+            
+            // Only show success toast if not cancelled and WebSocket hasn't already handled it
+            if (!isCancelled && !calibrationOutput.includes('Calibration cancelled by user')) {
+              toast.success('Calibration completed!')
+            }
+            
             checkCalibrationFiles()
           }
         }
@@ -393,9 +445,16 @@ export default function Calibration() {
 
     // Check status every 2 seconds
     const interval = setInterval(checkStatus, 2000)
+    monitoringIntervalRef.current = interval
     
     // Clean up interval when component unmounts or calibration stops
-    return () => clearInterval(interval)
+    return () => {
+      console.log('Clearing monitoring interval for session:', sessionId)
+      if (monitoringIntervalRef.current) {
+        clearInterval(monitoringIntervalRef.current)
+        monitoringIntervalRef.current = null
+      }
+    }
   }
 
   const handleContinue = async () => {
@@ -451,6 +510,62 @@ export default function Calibration() {
       toast.error(`Failed to send input: ${error}`)
     } finally {
       setIsSendingInput(false)
+    }
+  }
+
+  const handleCancel = async () => {
+    if (!sessionId) {
+      console.log('No session ID available for cancellation')
+      return
+    }
+
+    console.log('Cancelling calibration for session:', sessionId)
+
+    // Set cancellation flag and close WebSocket immediately to prevent status messages
+    setIsCancelled(true)
+    if (websocket) {
+      websocket.close()
+      setWebsocket(null)
+    }
+
+    try {
+      // Stop the calibration process via backend
+      const response = await fetch(`${BACKEND_URL}/calibrate/stop/${sessionId}`, {
+        method: 'DELETE'
+      })
+
+      console.log('Cancel response status:', response.status)
+      console.log('Cancel response ok:', response.ok)
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log('Cancel response result:', result)
+        if (result.success) {
+          toast.success('Calibration cancelled successfully')
+        } else {
+          toast.error('Failed to cancel calibration')
+        }
+      } else {
+        const errorText = await response.text()
+        console.error('Cancel failed with status:', response.status, 'Error:', errorText)
+        toast.error('Failed to cancel calibration')
+      }
+    } catch (error) {
+      console.error('Cancel calibration failed:', error)
+      toast.error(`Failed to cancel calibration: ${error}`)
+    } finally {
+      // Clean up state regardless of API response
+      setIsCalibrating(false)
+      setWaitingForUser(false)
+      setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'failed' as const })))
+      setCurrentStep(0)
+      setCalibrationOutput('[INFO] Calibration cancelled by user')
+      
+      // Clear monitoring interval
+      if (monitoringIntervalRef.current) {
+        clearInterval(monitoringIntervalRef.current)
+        monitoringIntervalRef.current = null
+      }
     }
   }
 
@@ -750,8 +865,8 @@ export default function Calibration() {
                   )}
                 </button>
 
-                {/* Continue Button - only show when waiting for user input */}
-                {waitingForUser && (
+                {/* Continue Button - only show when waiting for user input AND calibration is running */}
+                {waitingForUser && isCalibrating && (
                   <button
                     onClick={handleContinue}
                     disabled={isSendingInput}
@@ -765,9 +880,21 @@ export default function Calibration() {
                     ) : (
                       <>
                         <PlayIcon className="h-4 w-4 mr-2" />
-                        Continue (Press Enter)
+                        Continue
                       </>
                     )}
+                  </button>
+                )}
+
+                {/* Cancel Button - only show when calibration is running */}
+                {isCalibrating && (
+                  <button
+                    onClick={handleCancel}
+                    disabled={isSendingInput}
+                    className="btn-secondary bg-red-600 hover:bg-red-700 border-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <XMarkIcon className="h-4 w-4 mr-2" />
+                    Cancel Calibration
                   </button>
                 )}
               </div>
