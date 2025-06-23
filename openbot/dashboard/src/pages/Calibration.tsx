@@ -776,7 +776,7 @@ export default function Calibration() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="w-full">
             {/* Calibration Steps */}
             <div>
               {/* Steps List */}
@@ -897,39 +897,6 @@ export default function Calibration() {
                     Cancel Calibration
                   </button>
                 )}
-              </div>
-            </div>
-
-            {/* Output Console */}
-            <div>
-              <div className="card h-full">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Real-time Output</h2>
-                
-                <div className="bg-gray-900 text-green-400 p-4 rounded-lg h-96 overflow-y-auto font-mono text-sm">
-                  {calibrationOutput || 'Ready to start calibration...\n'}
-                  {waitingForUser && (
-                    <div className="text-yellow-400 animate-pulse">
-                      [WAITING] Click "Continue" button to proceed...
-                    </div>
-                  )}
-                  {isCalibrating && !waitingForUser && <span className="animate-pulse">█</span>}
-                </div>
-                
-                <div className="mt-4 text-sm text-gray-600">
-                  <p>• Real-time output from the LeRobot calibration command</p>
-                  <p>• Click "Continue" button to send Enter key when prompted</p>
-                  <p>• Make sure LeRobot is installed: <code className="bg-gray-100 px-1 rounded">pip install lerobot</code></p>
-                  <p>• Calibration files will be saved to:</p>
-                  <ul className="list-disc list-inside ml-4 mt-2">
-                    <li><strong>Leader Arm:</strong> <code className="bg-gray-100 px-1 rounded">~/.cache/huggingface/lerobot/calibration/teleoperators/&lt;robot_type&gt;/&lt;robot_id&gt;.json</code></li>
-                    <li><strong>Follower Arm:</strong> <code className="bg-gray-100 px-1 rounded">~/.cache/huggingface/lerobot/calibration/robots/&lt;robot_type&gt;/&lt;robot_id&gt;.json</code></li>
-                  </ul>
-                  <p>• The calibration process has two interactive steps:</p>
-                  <ul className="list-disc list-inside ml-4 mt-2">
-                    <li>Move arm to zero position (click Continue when done)</li>
-                    <li>Move joints through ranges (click Continue when done)</li>
-                  </ul>
-                </div>
               </div>
             </div>
           </div>

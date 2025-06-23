@@ -4,7 +4,11 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import json
 import asyncio
+import logging
 from calibration_service import calibration_service
+
+# Configure logging to suppress access logs for health checks
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 app = FastAPI(title="LeRobot Calibration API", version="1.0.0")
 
@@ -162,10 +166,13 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
             if not is_running:
                 # Process has finished
                 print(f"Process finished for {session_id}")
-                await websocket.send_text(json.dumps({
-                    "type": "status",
-                    "data": {"is_running": False, "status": "finished"}
-                }))
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "status",
+                        "data": {"is_running": False, "status": "finished"}
+                    }))
+                except Exception as e:
+                    print(f"Failed to send finish message for {session_id}: {e}")
                 break
             
             # Get all available output messages at once
@@ -175,10 +182,15 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
                 for output in outputs:
                     message_count += 1
                     print(f"Sending output #{message_count} to WebSocket for {session_id}: {output}")
-                    await websocket.send_text(json.dumps({
-                        "type": "output",
-                        "data": output.strip()
-                    }))
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "output",
+                            "data": output.strip()
+                        }))
+                    except Exception as e:
+                        print(f"Failed to send output message for {session_id}: {e}")
+                        # If we can't send, the connection is likely closed
+                        break
                     
                     # Check if this output indicates completion
                     if "Calibration completed successfully" in output or "Calibration saved to" in output:
@@ -186,10 +198,13 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
                         is_running = await calibration_service.is_running(session_id)
                         if not is_running:
                             print(f"Process confirmed finished for {session_id} after completion output")
-                            await websocket.send_text(json.dumps({
-                                "type": "status",
-                                "data": {"is_running": False, "status": "finished"}
-                            }))
+                            try:
+                                await websocket.send_text(json.dumps({
+                                    "type": "status",
+                                    "data": {"is_running": False, "status": "finished"}
+                                }))
+                            except Exception as e:
+                                print(f"Failed to send completion message for {session_id}: {e}")
                             break
             
             # Wait a bit before checking again (reduced delay for more responsive output)
@@ -199,12 +214,18 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
         print(f"WebSocket disconnected for session {session_id}")
     except Exception as e:
         print(f"WebSocket error for {session_id}: {e}")
-        await websocket.send_text(json.dumps({
-            "type": "error",
-            "data": str(e)
-        }))
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "data": str(e)
+            }))
+        except Exception as send_error:
+            print(f"Failed to send error message for {session_id}: {send_error}")
     finally:
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception as close_error:
+            print(f"Error closing WebSocket for {session_id}: {close_error}")
         print(f"WebSocket connection closed for session {session_id}, sent {message_count} messages total")
 
 if __name__ == "__main__":
