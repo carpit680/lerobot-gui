@@ -66,9 +66,15 @@ export default function Calibration() {
           status: 'pending'
         },
         {
-          id: 'calibration',
-          name: 'Run Calibration',
-          description: 'Execute the calibration process using LeRobot API',
+          id: 'step1',
+          name: 'Step 1: Move to Middle Position',
+          description: 'Move the test joint to the middle of its range',
+          status: 'pending'
+        },
+        {
+          id: 'step2',
+          name: 'Step 2: Move All Joints',
+          description: 'Move all joints through their entire range of motion',
           status: 'pending'
         },
         {
@@ -91,9 +97,15 @@ export default function Calibration() {
           status: 'pending'
         },
         {
-          id: 'calibration',
-          name: 'Run Calibration',
-          description: 'Execute the calibration process using LeRobot API',
+          id: 'step1',
+          name: 'Step 1: Move to Middle Position',
+          description: 'Move the test joint to the middle of its range',
+          status: 'pending'
+        },
+        {
+          id: 'step2',
+          name: 'Step 2: Move All Joints',
+          description: 'Move all joints through their entire range of motion',
           status: 'pending'
         },
         {
@@ -280,7 +292,7 @@ export default function Calibration() {
             setCurrentStep(1)
           }
           
-          // Step 1: Calibration - Look for calibration progress
+          // Step 1: Move to Middle Position - Look for "Move test" message
           else if (cleanOutput.includes('Move test') && cleanOutput.includes('middle of its range')) {
             setCalibrationSteps(prev => prev.map((step, idx) => 
               idx === 0 ? { ...step, status: 'completed' as const } : 
@@ -288,16 +300,9 @@ export default function Calibration() {
             ))
             setCurrentStep(1)
           }
+          
+          // Step 2: Move All Joints - Look for "Move all joints" message
           else if (cleanOutput.includes('Move all joints') && cleanOutput.includes('entire ranges')) {
-            setCalibrationSteps(prev => prev.map((step, idx) => 
-              idx === 0 ? { ...step, status: 'completed' as const } : 
-              idx === 1 ? { ...step, status: 'in-progress' as const } : step
-            ))
-            setCurrentStep(1)
-          }
-          else if (cleanOutput.includes('Calibration data collected') ||
-                   cleanOutput.includes('Calibration data saved') ||
-                   cleanOutput.includes('Calibration saved to')) {
             setCalibrationSteps(prev => prev.map((step, idx) => 
               idx === 1 ? { ...step, status: 'completed' as const } : 
               idx === 2 ? { ...step, status: 'in-progress' as const } : step
@@ -305,8 +310,11 @@ export default function Calibration() {
             setCurrentStep(2)
           }
           
-          // Step 2: Completion - Look for final completion
-          else if (cleanOutput.includes('Calibration completed successfully') || 
+          // Completion - Look for calibration data saved or completion messages
+          else if (cleanOutput.includes('Calibration data collected') ||
+                   cleanOutput.includes('Calibration data saved') ||
+                   cleanOutput.includes('Calibration saved to') ||
+                   cleanOutput.includes('Calibration completed successfully') || 
                    cleanOutput.includes('Process finished') ||
                    cleanOutput.includes('Calibration completed!') ||
                    cleanOutput.includes('exit code 0') ||
