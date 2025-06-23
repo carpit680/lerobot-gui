@@ -132,6 +132,10 @@ export default function ArmConfiguration() {
         name: cam.name,
         url: `/video/camera/${cam.index}`,
         enabled: true,
+        index: cam.index,
+        width: cam.width || 1920,
+        height: cam.height || 1080,
+        fps: cam.fps || 30,
       }))
       
       // Merge with existing cameras, preserving states

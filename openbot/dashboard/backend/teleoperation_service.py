@@ -8,6 +8,7 @@ import os
 import pty
 import select
 import time
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ class TeleoperationService:
         self.cancelled_sessions = set()  # Track cancelled sessions
 
     async def start_teleoperation(self, leader_type: str, leader_port: str, leader_id: str,
-                                  follower_type: str, follower_port: str, follower_id: str) -> str:
+                                  follower_type: str, follower_port: str, follower_id: str,
+                                  cameras: list = None) -> str:
         """
         Start a teleoperation process using LeRobot command and return a session ID
         """
@@ -45,6 +47,7 @@ class TeleoperationService:
                 "follower_type": follower_type,
                 "follower_port": follower_port,
                 "follower_id": follower_id,
+                "cameras": cameras or [],
                 "status": "starting",
                 "start_time": datetime.now(),
                 "output": []
@@ -60,6 +63,23 @@ class TeleoperationService:
                 f"--teleop.port={leader_port}",
                 f"--teleop.id={leader_id}"
             ]
+
+            # Add camera configuration if cameras are provided
+            if cameras and len(cameras) > 0:
+                camera_config = {}
+                for i, camera in enumerate(cameras):
+                    camera_name = camera.get('name', f'camera_{i}')
+                    camera_config[camera_name] = {
+                        'type': camera.get('type', 'opencv'),
+                        'index_or_path': camera.get('index', 0),
+                        'width': camera.get('width', 1920),
+                        'height': camera.get('height', 1080),
+                        'fps': camera.get('fps', 30)
+                    }
+                
+                camera_json = json.dumps(camera_config)
+                command.append(f"--robot.cameras={camera_json}")
+                command.append("--display_data=true")
 
             logger.info(f"Executing teleoperation command: {' '.join(command)}")
 

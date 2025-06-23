@@ -13,6 +13,10 @@ export interface CameraConfig {
   name: string
   url: string
   enabled: boolean
+  width?: number
+  height?: number
+  fps?: number
+  index?: number
 }
 
 export interface Dataset {

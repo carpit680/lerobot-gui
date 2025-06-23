@@ -31,6 +31,7 @@ export default function Teleoperation() {
   const [websocket, setWebsocket] = useState<WebSocket | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
+  const [selectedCameras, setSelectedCameras] = useState<string[]>([])
 
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -55,6 +56,16 @@ export default function Teleoperation() {
     } catch {
       setBackendConnected(false)
     }
+  }
+
+  const handleCameraToggle = (cameraId: string) => {
+    setSelectedCameras(prev => {
+      if (prev.includes(cameraId)) {
+        return prev.filter(id => id !== cameraId)
+      } else {
+        return [...prev, cameraId]
+      }
+    })
   }
 
   const startTeleoperation = async () => {
@@ -86,13 +97,24 @@ export default function Teleoperation() {
           follower_type: `${followerType}_follower`,
           follower_port: followerPort,
           follower_id: followerId,
+          cameras: selectedCameras.map(cameraId => {
+            const camera = cameras.find(c => c.id === cameraId)
+            return {
+              name: camera?.name || cameraId,
+              index: camera?.index || parseInt(cameraId.replace('camera', '')),
+              width: camera?.width || 1920,
+              height: camera?.height || 1080,
+              fps: camera?.fps || 30,
+              type: 'opencv'
+            }
+          })
         })
       })
       if (!response.ok) throw new Error('Failed to start teleoperation')
       const result = await response.json()
       setSessionId(result.session_id)
       startWebSocketConnection(result.session_id)
-    toast.success('Teleoperation started')
+      toast.success('Teleoperation started')
     } catch (error) {
       toast.error('Failed to start teleoperation')
       setIsTeleoperating(false)
@@ -229,14 +251,14 @@ export default function Teleoperation() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Leader Arm ID</label>
-                        <input
+                  <input
                     type="text"
                     value={leaderId}
                     onChange={e => setLeaderId(e.target.value)}
                     className="input-field"
                     disabled={isTeleoperating}
-                        />
-                      </div>
+                  />
+                </div>
                 {/* Follower Config */}
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Follower Arm Type</label>
@@ -266,7 +288,29 @@ export default function Teleoperation() {
                     className="input-field"
                     disabled={isTeleoperating}
                   />
+                </div>
+                {/* Camera Selection */}
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Cameras</label>
+                  <div className="space-y-2">
+                    {cameras.filter(c => c.enabled).length === 0 ? (
+                      <p className="text-sm text-gray-500">No enabled cameras found. Configure cameras in Arm Configuration.</p>
+                    ) : (
+                      cameras.filter(c => c.enabled).map(camera => (
+                        <label key={camera.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedCameras.includes(camera.id)}
+                            onChange={() => handleCameraToggle(camera.id)}
+                            disabled={isTeleoperating}
+                            className="rounded"
+                          />
+                          <span className="text-sm text-gray-700">{camera.name}</span>
+                        </label>
+                      ))
+                    )}
                   </div>
+                </div>
                 <div className="flex gap-4 mt-4">
                   <button
                     onClick={startTeleoperation}

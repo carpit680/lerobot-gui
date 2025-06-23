@@ -47,6 +47,7 @@ class TeleoperationRequest(BaseModel):
     follower_type: str
     follower_port: str
     follower_id: str
+    cameras: Optional[list] = None
 
 @app.get("/")
 async def root():
@@ -177,11 +178,19 @@ async def scan_cameras():
     for idx in range(10):  # Scan indices 0-9
         cap = cv2.VideoCapture(idx)
         if cap is not None and cap.isOpened():
+            # Get camera properties
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            
             cameras.append({
                 "id": f"camera{idx}",
                 "name": f"Camera {idx}",
                 "index": idx,
                 "url": f"/video/camera/{idx}",  # This is a placeholder; frontend can use index
+                "width": width,
+                "height": height,
+                "fps": fps if fps > 0 else 30,
             })
             cap.release()
     return {"cameras": cameras}
@@ -346,7 +355,8 @@ async def start_teleoperation(request: TeleoperationRequest):
             leader_id=request.leader_id,
             follower_type=request.follower_type,
             follower_port=request.follower_port,
-            follower_id=request.follower_id
+            follower_id=request.follower_id,
+            cameras=request.cameras
         )
         return {
             "success": True,
