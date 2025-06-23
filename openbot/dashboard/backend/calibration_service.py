@@ -400,26 +400,41 @@ class CalibrationService:
             logger.error(f"Failed to stop calibration {session_id}: {e}")
             return False
     
-    async def check_calibration_files(self, robot_id: str) -> Dict[str, Any]:
+    async def check_calibration_files(self, robot_id: str, arm_type: str = "follower") -> Dict[str, Any]:
         """
-        Check if calibration files exist for a given robot ID
+        Check if calibration files exist for a given robot ID and arm type
         """
-        try:
+        # Determine the correct directory based on arm type
+        if arm_type == "leader":
+            cache_dir = Path.home() / ".cache" / "huggingface" / "lerobot" / "calibration" / "teleoperators"
+        else:
             cache_dir = Path.home() / ".cache" / "huggingface" / "lerobot" / "calibration" / "robots"
+        
+        try:
             files = []
             
             if cache_dir.exists():
-                for file in cache_dir.glob(f"*{robot_id}*"):
-                    if file.is_file():
-                        files.append({
-                            "name": file.name,
-                            "path": str(file),
-                            "size": file.stat().st_size,
-                            "modified": file.stat().st_mtime
-                        })
+                # Recursively search through subdirectories
+                patterns = [
+                    f"*{robot_id}*",
+                ]
+                
+                for pattern in patterns:
+                    # Search recursively through all subdirectories
+                    for file in cache_dir.rglob(pattern):
+                        if file.is_file() and file not in [f["path"] for f in files]:
+                            files.append({
+                                "name": file.name,
+                                "path": str(file),
+                                "size": file.stat().st_size,
+                                "modified": file.stat().st_mtime
+                            })
+            else:
+                logger.warning(f"Cache directory does not exist: {cache_dir}")
             
             return {
                 "robot_id": robot_id,
+                "arm_type": arm_type,
                 "cache_directory": str(cache_dir),
                 "files": files,
                 "file_count": len(files)
@@ -429,7 +444,8 @@ class CalibrationService:
             logger.error(f"Failed to check calibration files: {e}")
             return {
                 "robot_id": robot_id,
-                "cache_directory": str(cache_dir) if 'cache_dir' in locals() else "unknown",
+                "arm_type": arm_type,
+                "cache_directory": str(cache_dir),
                 "files": [],
                 "file_count": 0,
                 "error": str(e)

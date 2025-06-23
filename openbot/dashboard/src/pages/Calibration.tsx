@@ -192,8 +192,7 @@ export default function Calibration() {
 
       const result = await response.json()
       setSessionId(result.session_id)
-      setCalibrationOutput(`Calibration started with session ID: ${result.session_id}\n`)
-      setCalibrationOutput(prev => prev + `Command: python -m lerobot.calibrate --${selectedArm === 'leader' ? 'teleop' : 'robot'}.type=${robotType} --${selectedArm === 'leader' ? 'teleop' : 'robot'}.port=${currentPort} --${selectedArm === 'leader' ? 'teleop' : 'robot'}.id=${robotId}\n\n`)
+      setCalibrationOutput(`Calibration started with session ID: ${result.session_id}\nCommand: python -m lerobot.calibrate --${selectedArm === 'leader' ? 'teleop' : 'robot'}.type=${robotType} --${selectedArm === 'leader' ? 'teleop' : 'robot'}.port=${currentPort} --${selectedArm === 'leader' ? 'teleop' : 'robot'}.id=${robotId}`)
 
       // Start WebSocket connection for real-time output
       startWebSocketConnection(result.session_id)
@@ -240,7 +239,7 @@ export default function Calibration() {
         
         console.log('Received calibration output:', cleanOutput)
         
-        setCalibrationOutput(prev => prev + cleanOutput + '\n')
+        setCalibrationOutput(cleanOutput)
         
         // Check if output indicates waiting for user input - more precise detection
         const output_lower = cleanOutput.toLowerCase()
@@ -278,7 +277,11 @@ export default function Calibration() {
               setCurrentStep(2)
             }
           }
-        } else if (cleanOutput.includes('Calibration completed successfully') || cleanOutput.includes('Process finished')) {
+        } else if (cleanOutput.includes('Calibration completed successfully') || 
+                   cleanOutput.includes('Process finished') ||
+                   cleanOutput.includes('Calibration completed!') ||
+                   cleanOutput.includes('exit code 0') ||
+                   cleanOutput.includes('calibration files saved')) {
           if (selectedRobotType) {
             selectedRobotType.calibrationSteps.forEach(step => {
               if (step.status === 'pending' || step.status === 'in-progress') {
@@ -286,6 +289,8 @@ export default function Calibration() {
               }
             })
             setCurrentStep(selectedRobotType.calibrationSteps.length - 1)
+            // Reset waiting state when calibration completes
+            setWaitingForUser(false)
           }
         }
       } else if (data.type === 'status') {
@@ -378,7 +383,7 @@ export default function Calibration() {
       const result = await response.json()
       if (result.success) {
         setWaitingForUser(false)
-        setCalibrationOutput(prev => prev + '[INFO] Enter key sent to calibration process\n')
+        setCalibrationOutput('[INFO] Enter key sent to calibration process')
         
         // Mark current step as completed when user clicks Continue
         if (selectedRobotType && selectedRobotType.calibrationSteps[currentStep]) {
@@ -398,49 +403,33 @@ export default function Calibration() {
     }
   }
 
-  const checkCalibrationFiles = async () => {
+  const checkCalibrationFiles = async (retryCount = 0) => {
     try {
-      const response = await fetch(`${BACKEND_URL}/check-calibration-files/${robotId}`)
+      const response = await fetch(`${BACKEND_URL}/check-calibration-files/${robotId}?arm_type=${selectedArm}`)
       if (response.ok) {
         const result = await response.json()
+        console.log('Calibration files check result:', result)
         if (result.file_count > 0) {
-          setCalibrationOutput(prev => prev + `[SUCCESS] Calibration files saved:\n`)
-          result.files.forEach((file: any) => {
-            setCalibrationOutput(prev => prev + `  - ${file.name} (${file.path})\n`)
-          })
+          const fileList = result.files.map((file: any) => `  - ${file.name} (${file.path})`).join('\n')
+          setCalibrationOutput(`[SUCCESS] Calibration files saved:\n${fileList}`)
         } else {
-          setCalibrationOutput(prev => prev + `[WARNING] No calibration files found in cache directory\n`)
+          if (retryCount < 3) {
+            // Retry after a delay if no files found
+            console.log(`No files found, retrying in 2 seconds... (attempt ${retryCount + 1}/3)`)
+            setTimeout(() => checkCalibrationFiles(retryCount + 1), 2000)
+            setCalibrationOutput(`[INFO] Checking for calibration files... (attempt ${retryCount + 1}/3)`)
+          } else {
+            setCalibrationOutput(`[WARNING] No calibration files found in cache directory: ${result.cache_directory}`)
+          }
         }
+      } else {
+        console.error('Failed to check calibration files:', response.status, response.statusText)
+        setCalibrationOutput(`[ERROR] Failed to check calibration files: ${response.status} ${response.statusText}`)
       }
     } catch (error) {
       console.error('Failed to check calibration files:', error)
+      setCalibrationOutput(`[ERROR] Failed to check calibration files: ${error}`)
     }
-  }
-
-  const resetCalibration = async () => {
-    if (sessionId) {
-      try {
-        await fetch(`${BACKEND_URL}/calibrate/stop/${sessionId}`, {
-          method: 'DELETE'
-        })
-      } catch (error) {
-        console.error('Failed to stop calibration:', error)
-      }
-    }
-
-    if (websocket) {
-      websocket.close()
-      setWebsocket(null)
-    }
-
-    if (selectedRobotType) {
-      selectedRobotType.calibrationSteps.forEach(step => step.status = 'pending')
-    }
-    setCurrentStep(0)
-    setCalibrationOutput('')
-    setWaitingForUser(false)
-    setSessionId('')
-    setIsCalibrating(false)
   }
 
   const getStepIcon = (step: CalibrationStep) => {
@@ -468,9 +457,6 @@ export default function Calibration() {
         return 'text-gray-600 bg-gray-50'
     }
   }
-
-  const completedSteps = selectedRobotType?.calibrationSteps.filter(step => step.status === 'completed').length || 0
-  const failedSteps = selectedRobotType?.calibrationSteps.filter(step => step.status === 'failed').length || 0
 
   return (
     <div className="lg:pl-72">
@@ -614,41 +600,16 @@ export default function Calibration() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Calibration Steps */}
             <div>
-              {/* Progress Overview */}
-              <div className="mb-6">
-                <div className="card">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900 font-heading">Calibration Progress</h2>
-                    <div className="text-sm text-gray-600">
-                      {completedSteps}/{selectedRobotType?.calibrationSteps.length || 0} completed
-                    </div>
-                  </div>
-                  
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-                    <div 
-                      className="bg-primary-600 h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${selectedRobotType ? (completedSteps / selectedRobotType.calibrationSteps.length) * 100 : 0}%` }}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-6 text-sm">
-                    <div className="flex items-center gap-2">
-                      <CheckCircleIcon className="h-4 w-4 text-green-500" />
-                      <span className="text-green-600">{completedSteps} completed</span>
-                    </div>
-                    {failedSteps > 0 && (
-                      <div className="flex items-center gap-2">
-                        <XCircleIcon className="h-4 w-4 text-red-500" />
-                        <span className="text-red-600">{failedSteps} failed</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
               {/* Steps List */}
               <div className="card">
-                <h2 className="text-xl font-semibold text-gray-900 mb-6 font-heading">Calibration Steps</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900 font-heading">Calibration Steps</h2>
+                  {isCalibrating && (
+                    <div className="text-sm text-blue-600 font-medium">
+                      Step {currentStep + 1} of {selectedRobotType?.calibrationSteps.length || 0}
+                    </div>
+                  )}
+                </div>
                 
                 <div className="space-y-4">
                   {selectedRobotType?.calibrationSteps.map((step, index) => (
@@ -656,9 +617,11 @@ export default function Calibration() {
                       key={step.id}
                       className={`p-4 rounded-lg border transition-colors ${
                         index === currentStep && step.status === 'in-progress'
-                          ? 'border-blue-300 bg-blue-50'
+                          ? 'border-blue-300 bg-blue-50 shadow-md'
                           : index === currentStep && step.status === 'waiting-user'
-                          ? 'border-yellow-300 bg-yellow-50'
+                          ? 'border-yellow-300 bg-yellow-50 shadow-md'
+                          : step.status === 'completed'
+                          ? 'border-green-300 bg-green-50'
                           : 'border-gray-200'
                       }`}
                     >
@@ -669,7 +632,15 @@ export default function Calibration() {
                         
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
-                            <h3 className="font-medium text-gray-900">{step.name}</h3>
+                            <h3 className={`font-medium ${index === currentStep ? 'text-blue-900' : 'text-gray-900'}`}>
+                              {step.name}
+                              {index === currentStep && step.status === 'in-progress' && (
+                                <span className="ml-2 text-blue-600 text-sm font-normal">(Current)</span>
+                              )}
+                              {index === currentStep && step.status === 'waiting-user' && (
+                                <span className="ml-2 text-yellow-600 text-sm font-normal">(Waiting for input)</span>
+                              )}
+                            </h3>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStepStatus(step)}`}>
                               {step.status.replace('-', ' ')}
                             </span>
@@ -707,15 +678,6 @@ export default function Calibration() {
                       Start Calibration
                     </>
                   )}
-                </button>
-                
-                <button
-                  onClick={resetCalibration}
-                  disabled={isCalibrating && !sessionId}
-                  className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <StopIcon className="h-4 w-4 mr-2" />
-                  Reset Calibration
                 </button>
 
                 {/* Continue Button - only show when waiting for user input */}
@@ -760,7 +722,11 @@ export default function Calibration() {
                   <p>• Real-time output from the LeRobot calibration command</p>
                   <p>• Click "Continue" button to send Enter key when prompted</p>
                   <p>• Make sure LeRobot is installed: <code className="bg-gray-100 px-1 rounded">pip install lerobot</code></p>
-                  <p>• Calibration files will be saved to: <code className="bg-gray-100 px-1 rounded">~/.cache/huggingface/lerobot/calibration/robots/</code></p>
+                  <p>• Calibration files will be saved to:</p>
+                  <ul className="list-disc list-inside ml-4 mt-2">
+                    <li><strong>Leader Arm:</strong> <code className="bg-gray-100 px-1 rounded">~/.cache/huggingface/lerobot/calibration/teleoperators/&lt;robot_type&gt;/&lt;robot_id&gt;.json</code></li>
+                    <li><strong>Follower Arm:</strong> <code className="bg-gray-100 px-1 rounded">~/.cache/huggingface/lerobot/calibration/robots/&lt;robot_type&gt;/&lt;robot_id&gt;.json</code></li>
+                  </ul>
                   <p>• The calibration process has two interactive steps:</p>
                   <ul className="list-disc list-inside ml-4 mt-2">
                     <li>Move arm to zero position (click Continue when done)</li>

@@ -112,12 +112,12 @@ async def stop_calibration(session_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to stop calibration: {str(e)}")
 
 @app.get("/check-calibration-files/{robot_id}")
-async def check_calibration_files(robot_id: str):
+async def check_calibration_files(robot_id: str, arm_type: str = "follower"):
     """
-    Check if calibration files exist for a given robot ID
+    Check if calibration files exist for a given robot ID and arm type
     """
     try:
-        result = await calibration_service.check_calibration_files(robot_id)
+        result = await calibration_service.check_calibration_files(robot_id, arm_type)
         return result
         
     except Exception as e:
@@ -179,9 +179,6 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
                         "type": "output",
                         "data": output.strip()
                     }))
-            else:
-                # Debug: log when no outputs are available
-                print(f"No outputs available for {session_id} (iteration {message_count})")
             
             # Wait a bit before checking again (reduced delay for more responsive output)
             await asyncio.sleep(0.01)
