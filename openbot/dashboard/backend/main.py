@@ -6,6 +6,7 @@ import json
 import asyncio
 import logging
 from calibration_service import calibration_service
+from teleoperation_service import teleoperation_service
 
 # Configure logging to suppress access logs for health checks
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
@@ -30,6 +31,14 @@ class CalibrationRequest(BaseModel):
 class InputRequest(BaseModel):
     session_id: str
     input_data: str = "\n"
+
+class TeleoperationRequest(BaseModel):
+    leader_type: str
+    leader_port: str
+    leader_id: str
+    follower_type: str
+    follower_port: str
+    follower_id: str
 
 @app.get("/")
 async def root():
@@ -238,6 +247,98 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
         except Exception as close_error:
             print(f"Error closing WebSocket for {session_id}: {close_error}")
         print(f"WebSocket connection closed for session {session_id}, sent {message_count} messages total")
+
+@app.post("/teleop/start")
+async def start_teleoperation(request: TeleoperationRequest):
+    try:
+        session_id = await teleoperation_service.start_teleoperation(
+            leader_type=request.leader_type,
+            leader_port=request.leader_port,
+            leader_id=request.leader_id,
+            follower_type=request.follower_type,
+            follower_port=request.follower_port,
+            follower_id=request.follower_id
+        )
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message": f"Teleoperation started for leader {request.leader_id} and follower {request.follower_id}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start teleoperation: {str(e)}")
+
+@app.get("/teleop/status/{session_id}")
+async def get_teleoperation_status(session_id: str):
+    try:
+        is_running = await teleoperation_service.is_running(session_id)
+        return {
+            "session_id": session_id,
+            "is_running": is_running,
+            "status": "running" if is_running else "finished"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get teleoperation status: {str(e)}")
+
+@app.delete("/teleop/stop/{session_id}")
+async def stop_teleoperation(session_id: str):
+    try:
+        success = await teleoperation_service.stop_teleoperation(session_id)
+        return {
+            "success": success,
+            "message": "Teleoperation stopped successfully" if success else "Failed to stop teleoperation"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop teleoperation: {str(e)}")
+
+@app.websocket("/ws/teleop/{session_id}")
+async def websocket_teleoperation(websocket: WebSocket, session_id: str):
+    await websocket.accept()
+    message_count = 0
+    try:
+        initial_message = {
+            "type": "status",
+            "data": {"message": "WebSocket connected", "session_id": session_id}
+        }
+        await websocket.send_text(json.dumps(initial_message))
+        message_count += 1
+        while True:
+            is_running = await teleoperation_service.is_running(session_id)
+            if not is_running:
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "status",
+                        "data": {"is_running": False, "status": "finished"}
+                    }))
+                except Exception:
+                    pass
+                break
+            outputs = await teleoperation_service.get_all_output(session_id)
+            if outputs:
+                for output in outputs:
+                    message_count += 1
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "output",
+                            "data": output.strip()
+                        }))
+                    except Exception:
+                        break
+            await asyncio.sleep(0.01)
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "data": str(e)
+            }))
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     import uvicorn

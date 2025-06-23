@@ -11,38 +11,26 @@ import {
   ArrowRightIcon,
 } from '@heroicons/react/24/outline'
 
-interface JointControl {
-  name: string
-  value: number
-  min: number
-  max: number
-  unit: string
-}
+const BACKEND_URL = 'http://localhost:8000'
+
+const robotTypes = [
+  { id: 'so100', name: 'SO-100', description: '5-DOF robotic arm' },
+  { id: 'giraffe', name: 'Giraffe v1.1', description: '6-DOF robotic arm' },
+]
 
 export default function Teleoperation() {
-  const { armConfig, cameras, setSessionState } = useLeRobotStore()
+  const { armConfig, cameras } = useLeRobotStore()
   const [isTeleoperating, setIsTeleoperating] = useState(false)
   const [selectedCamera, setSelectedCamera] = useState<string>('')
-  const [controlMode, setControlMode] = useState<'joint' | 'cartesian'>('joint')
-  const [speed, setSpeed] = useState(50)
-  
-  const [jointControls, setJointControls] = useState<JointControl[]>([
-    { name: 'Joint 1', value: 0, min: -180, max: 180, unit: '°' },
-    { name: 'Joint 2', value: 0, min: -90, max: 90, unit: '°' },
-    { name: 'Joint 3', value: 0, min: -180, max: 180, unit: '°' },
-    { name: 'Joint 4', value: 0, min: -90, max: 90, unit: '°' },
-    { name: 'Joint 5', value: 0, min: -180, max: 180, unit: '°' },
-    { name: 'Joint 6', value: 0, min: -180, max: 180, unit: '°' },
-  ])
-
-  const [cartesianPosition, setCartesianPosition] = useState({
-    x: 0,
-    y: 0,
-    z: 0,
-    roll: 0,
-    pitch: 0,
-    yaw: 0
-  })
+  const [leaderType, setLeaderType] = useState('giraffe')
+  const [followerType, setFollowerType] = useState('giraffe')
+  const [leaderId, setLeaderId] = useState('giraffe_leader')
+  const [followerId, setFollowerId] = useState('giraffe_follower')
+  const [sessionId, setSessionId] = useState('')
+  const [output, setOutput] = useState<string[]>([])
+  const [websocket, setWebsocket] = useState<WebSocket | null>(null)
+  const [isRunning, setIsRunning] = useState(false)
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -54,85 +42,110 @@ export default function Teleoperation() {
     }
   }, [cameras])
 
-  const startTeleoperation = () => {
-    if (!armConfig.leaderConnected) {
-      toast.error('Leader arm must be connected for teleoperation')
+  useEffect(() => {
+    checkBackendConnection()
+    const interval = setInterval(checkBackendConnection, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const checkBackendConnection = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/health`)
+      setBackendConnected(response.ok)
+    } catch {
+      setBackendConnected(false)
+    }
+  }
+
+  const startTeleoperation = async () => {
+    const leaderPort = armConfig.leaderPort || ''
+    const followerPort = armConfig.followerPort || ''
+    if (!leaderPort || !followerPort) {
+      toast.error('Please configure both leader and follower arm ports')
       return
     }
-
+    if (!leaderId.trim() || !followerId.trim()) {
+      toast.error('Please provide unique IDs for both arms')
+      return
+    }
+    if (backendConnected !== true) {
+      toast.error('Backend is not connected. Please start the Python backend server.')
+      return
+    }
     setIsTeleoperating(true)
-    setSessionState({ isTeleoperating: true })
-    toast.success('Teleoperation started')
-  }
-
-  const stopTeleoperation = () => {
-    setIsTeleoperating(false)
-    setSessionState({ isTeleoperating: false })
-    toast.success('Teleoperation stopped')
-  }
-
-  const updateJoint = (index: number, value: number) => {
-    setJointControls(prev => prev.map((joint, i) => 
-      i === index ? { ...joint, value } : joint
-    ))
-  }
-
-  const updateCartesian = (axis: string, value: number) => {
-    setCartesianPosition(prev => ({ ...prev, [axis]: value }))
-  }
-
-  const handleKeyPress = (event: KeyboardEvent) => {
-    if (!isTeleoperating) return
-
-    const step = speed / 10
-    let updated = false
-
-    switch (event.key) {
-      case 'ArrowUp':
-        if (controlMode === 'cartesian') {
-          updateCartesian('y', cartesianPosition.y + step)
-        } else {
-          updateJoint(1, Math.min(jointControls[1].max, jointControls[1].value + step))
-        }
-        updated = true
-        break
-      case 'ArrowDown':
-        if (controlMode === 'cartesian') {
-          updateCartesian('y', cartesianPosition.y - step)
-        } else {
-          updateJoint(1, Math.max(jointControls[1].min, jointControls[1].value - step))
-        }
-        updated = true
-        break
-      case 'ArrowLeft':
-        if (controlMode === 'cartesian') {
-          updateCartesian('x', cartesianPosition.x - step)
-        } else {
-          updateJoint(0, Math.max(jointControls[0].min, jointControls[0].value - step))
-        }
-        updated = true
-        break
-      case 'ArrowRight':
-        if (controlMode === 'cartesian') {
-          updateCartesian('x', cartesianPosition.x + step)
-        } else {
-          updateJoint(0, Math.min(jointControls[0].max, jointControls[0].value + step))
-        }
-        updated = true
-        break
-    }
-
-    if (updated) {
-      event.preventDefault()
+    setIsRunning(true)
+    setOutput([])
+    try {
+      const response = await fetch(`${BACKEND_URL}/teleop/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leader_type: `${leaderType}_leader`,
+          leader_port: leaderPort,
+          leader_id: leaderId,
+          follower_type: `${followerType}_follower`,
+          follower_port: followerPort,
+          follower_id: followerId,
+        })
+      })
+      if (!response.ok) throw new Error('Failed to start teleoperation')
+      const result = await response.json()
+      setSessionId(result.session_id)
+      startWebSocketConnection(result.session_id)
+      toast.success('Teleoperation started')
+    } catch (error) {
+      toast.error('Failed to start teleoperation')
+      setIsTeleoperating(false)
+      setIsRunning(false)
     }
   }
 
-  useEffect(() => {
-    if (isTeleoperating) {
-      document.addEventListener('keydown', handleKeyPress)
-      return () => document.removeEventListener('keydown', handleKeyPress)
+  const stopTeleoperation = async () => {
+    if (!sessionId) return
+    try {
+      await fetch(`${BACKEND_URL}/teleop/stop/${sessionId}`, { method: 'DELETE' })
+      setIsTeleoperating(false)
+      setIsRunning(false)
+      setSessionId('')
+      setOutput([])
+      if (websocket) {
+        websocket.close()
+        setWebsocket(null)
+      }
+      toast.success('Teleoperation stopped')
+    } catch {
+      toast.error('Failed to stop teleoperation')
     }
-  }, [isTeleoperating, controlMode, speed, jointControls, cartesianPosition])
+  }
+
+  const startWebSocketConnection = (sessionId: string) => {
+    const wsUrl = `ws://localhost:8000/ws/teleop/${sessionId}`
+    const ws = new WebSocket(wsUrl)
+    setWebsocket(ws)
+    ws.onopen = () => {
+      //
+    }
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'output') {
+        setOutput(prev => [...prev, data.data])
+      } else if (data.type === 'status') {
+        if (data.data.status === 'finished') {
+          setIsRunning(false)
+          setIsTeleoperating(false)
+          toast.success('Teleoperation finished')
+        }
+      } else if (data.type === 'error') {
+        toast.error(`Teleoperation error: ${data.data}`)
+      }
+    }
+    ws.onerror = () => {
+      toast.error('WebSocket error')
+    }
+    ws.onclose = () => {
+      setWebsocket(null)
+    }
+  }
 
   const enabledCameras = cameras.filter(c => c.enabled)
 
@@ -140,11 +153,10 @@ export default function Teleoperation() {
     <div className="lg:pl-72">
       <div className="px-4 sm:px-6 lg:px-8 py-8">
         <div className="mx-auto max-w-7xl">
-          {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 font-heading">Teleoperation</h1>
             <p className="mt-2 text-gray-600">
-              Manually control robot arms with real-time camera feedback
+              Start and monitor teleoperation between two robot arms
             </p>
           </div>
 
@@ -169,7 +181,6 @@ export default function Teleoperation() {
                     </select>
                   </div>
                 </div>
-
                 <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
                   {selectedCamera ? (
                     <video
@@ -189,177 +200,101 @@ export default function Teleoperation() {
                     </div>
                   )}
                 </div>
-
-                {/* Camera Controls */}
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={startTeleoperation}
-                      disabled={isTeleoperating || !armConfig.leaderConnected}
-                      className="btn-primary disabled:opacity-50"
-                    >
-                      <PlayIcon className="h-4 w-4 mr-2" />
-                      Start
-                    </button>
-                    <button
-                      onClick={stopTeleoperation}
-                      disabled={!isTeleoperating}
-                      className="btn-danger disabled:opacity-50"
-                    >
-                      <StopIcon className="h-4 w-4 mr-2" />
-                      Stop
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Speed:</span>
-                    <input
-                      type="range"
-                      min="10"
-                      max="100"
-                      value={speed}
-                      onChange={(e) => setSpeed(Number(e.target.value))}
-                      className="w-24"
-                    />
-                    <span className="text-sm text-gray-600 w-8">{speed}%</span>
-                  </div>
-                </div>
               </div>
             </div>
 
-            {/* Control Panel */}
+            {/* Teleoperation Config & Output */}
             <div className="space-y-6">
-              {/* Control Mode */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Control Mode</h3>
-                <div className="space-y-2">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="joint"
-                      checked={controlMode === 'joint'}
-                      onChange={(e) => setControlMode(e.target.value as 'joint' | 'cartesian')}
-                      className="mr-2"
-                    />
-                    Joint Control
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="cartesian"
-                      checked={controlMode === 'cartesian'}
-                      onChange={(e) => setControlMode(e.target.value as 'joint' | 'cartesian')}
-                      className="mr-2"
-                    />
-                    Cartesian Control
-                  </label>
+              <div className="card space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Teleoperation Configuration</h3>
+                {/* Leader Config */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Leader Arm Type</label>
+                  <select
+                    value={leaderType}
+                    onChange={e => setLeaderType(e.target.value)}
+                    className="input-field"
+                    disabled={isTeleoperating}
+                  >
+                    {robotTypes.map(robot => (
+                      <option key={robot.id} value={robot.id}>{robot.name} - {robot.description}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Leader Arm Port</label>
+                  <div className="input-field bg-gray-100 text-gray-700 cursor-not-allowed">
+                    {armConfig.leaderPort || <span className="text-gray-400">Not configured</span>}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Leader Arm ID</label>
+                  <input
+                    type="text"
+                    value={leaderId}
+                    onChange={e => setLeaderId(e.target.value)}
+                    className="input-field"
+                    disabled={isTeleoperating}
+                  />
+                </div>
+                {/* Follower Config */}
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Follower Arm Type</label>
+                  <select
+                    value={followerType}
+                    onChange={e => setFollowerType(e.target.value)}
+                    className="input-field"
+                    disabled={isTeleoperating}
+                  >
+                    {robotTypes.map(robot => (
+                      <option key={robot.id} value={robot.id}>{robot.name} - {robot.description}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Follower Arm Port</label>
+                  <div className="input-field bg-gray-100 text-gray-700 cursor-not-allowed">
+                    {armConfig.followerPort || <span className="text-gray-400">Not configured</span>}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Follower Arm ID</label>
+                  <input
+                    type="text"
+                    value={followerId}
+                    onChange={e => setFollowerId(e.target.value)}
+                    className="input-field"
+                    disabled={isTeleoperating}
+                  />
+                </div>
+                <div className="flex gap-4 mt-4">
+                  <button
+                    onClick={startTeleoperation}
+                    disabled={isTeleoperating || !armConfig.leaderPort || !armConfig.followerPort || !leaderId.trim() || !followerId.trim() || backendConnected === false}
+                    className="btn-primary w-32 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <PlayIcon className="h-4 w-4 mr-2" />
+                    Start
+                  </button>
+                  <button
+                    onClick={stopTeleoperation}
+                    disabled={!isTeleoperating}
+                    className="btn-danger w-32 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <StopIcon className="h-4 w-4 mr-2" />
+                    Stop
+                  </button>
                 </div>
               </div>
-
-              {/* Joint Controls */}
-              {controlMode === 'joint' && (
-                <div className="card">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Joint Control</h3>
-                  <div className="space-y-4">
-                    {jointControls.map((joint, index) => (
-                      <div key={joint.name}>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="text-sm font-medium text-gray-700">
-                            {joint.name}
-                          </label>
-                          <span className="text-sm text-gray-600">
-                            {joint.value.toFixed(1)}{joint.unit}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min={joint.min}
-                          max={joint.max}
-                          value={joint.value}
-                          onChange={(e) => updateJoint(index, Number(e.target.value))}
-                          disabled={!isTeleoperating}
-                          className="w-full disabled:opacity-50"
-                        />
-                        <div className="flex justify-between text-xs text-gray-500 mt-1">
-                          <span>{joint.min}{joint.unit}</span>
-                          <span>{joint.max}{joint.unit}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Cartesian Controls */}
-              {controlMode === 'cartesian' && (
-                <div className="card">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Cartesian Control</h3>
-                  <div className="space-y-4">
-                    {Object.entries(cartesianPosition).map(([axis, value]) => (
-                      <div key={axis}>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="text-sm font-medium text-gray-700 capitalize">
-                            {axis}
-                          </label>
-                          <span className="text-sm text-gray-600">
-                            {value.toFixed(2)} {axis === 'x' || axis === 'y' || axis === 'z' ? 'mm' : '°'}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min={axis === 'x' || axis === 'y' || axis === 'z' ? -500 : -180}
-                          max={axis === 'x' || axis === 'y' || axis === 'z' ? 500 : 180}
-                          value={value}
-                          onChange={(e) => updateCartesian(axis, Number(e.target.value))}
-                          disabled={!isTeleoperating}
-                          className="w-full disabled:opacity-50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Keyboard Controls */}
+              {/* Output */}
               <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Keyboard Controls</h3>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div></div>
-                  <div className="p-2 bg-gray-100 rounded">
-                    <ArrowUpIcon className="h-4 w-4 mx-auto" />
-                  </div>
-                  <div></div>
-                  <div className="p-2 bg-gray-100 rounded">
-                    <ArrowLeftIcon className="h-4 w-4 mx-auto" />
-                  </div>
-                  <div className="p-2 bg-gray-100 rounded">
-                    <ArrowDownIcon className="h-4 w-4 mx-auto" />
-                  </div>
-                  <div className="p-2 bg-gray-100 rounded">
-                    <ArrowRightIcon className="h-4 w-4 mx-auto" />
-                  </div>
-                </div>
-                <p className="text-xs text-gray-600 mt-2 text-center">
-                  Use arrow keys to control movement
-                </p>
-              </div>
-
-              {/* Status */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Status</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Leader Arm:</span>
-                    <span className={armConfig.leaderConnected ? 'text-green-600' : 'text-red-600'}>
-                      {armConfig.leaderConnected ? 'Connected' : 'Disconnected'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Teleoperation:</span>
-                    <span className={isTeleoperating ? 'text-green-600' : 'text-gray-600'}>
-                      {isTeleoperating ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Teleoperation Output</h3>
+                <div className="h-48 overflow-y-auto bg-gray-100 rounded p-2 text-xs font-mono whitespace-pre-wrap">
+                  {output.length === 0 ? (
+                    <span className="text-gray-400">No output yet.</span>
+                  ) : (
+                    output.map((line, idx) => <div key={idx}>{line}</div>)
+                  )}
                 </div>
               </div>
             </div>

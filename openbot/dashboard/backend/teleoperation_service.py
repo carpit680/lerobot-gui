@@ -1,0 +1,210 @@
+import subprocess
+import threading
+import queue
+from datetime import datetime
+from pathlib import Path
+import logging
+import os
+import pty
+import select
+import time
+
+logger = logging.getLogger(__name__)
+
+class TeleoperationService:
+    def __init__(self):
+        self.active_sessions = {}   # session_id -> session_data
+        self.output_queues = {}     # session_id -> Queue
+        self.active_processes = {}  # session_id -> (process, master_fd)
+        self.cancelled_sessions = set()  # Track cancelled sessions
+
+    async def start_teleoperation(self, leader_type: str, leader_port: str, leader_id: str,
+                                  follower_type: str, follower_port: str, follower_id: str) -> str:
+        """
+        Start a teleoperation process using LeRobot command and return a session ID
+        """
+        try:
+            session_id = f"{leader_id}_{follower_id}_teleop"
+
+            # Clean up any existing session with the same ID
+            if session_id in self.active_processes:
+                logger.warning(f"Session {session_id} already exists, cleaning up")
+                await self.stop_teleoperation(session_id)
+
+            # Remove from cancelled sessions if it was there
+            self.cancelled_sessions.discard(session_id)
+
+            # Create output queue for this session
+            self.output_queues[session_id] = queue.Queue()
+
+            # Store session info
+            self.active_sessions[session_id] = {
+                "leader_type": leader_type,
+                "leader_port": leader_port,
+                "leader_id": leader_id,
+                "follower_type": follower_type,
+                "follower_port": follower_port,
+                "follower_id": follower_id,
+                "status": "starting",
+                "start_time": datetime.now(),
+                "output": []
+            }
+
+            # Build the teleoperation command
+            command = [
+                "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-m", "lerobot.teleoperate",
+                f"--robot.type={follower_type}",
+                f"--robot.port={follower_port}",
+                f"--robot.id={follower_id}",
+                f"--teleop.type={leader_type}",
+                f"--teleop.port={leader_port}",
+                f"--teleop.id={leader_id}"
+            ]
+
+            logger.info(f"Executing teleoperation command: {' '.join(command)}")
+
+            # Use PTY for better interactive output handling
+            master_fd, slave_fd = pty.openpty()
+
+            process = subprocess.Popen(
+                command,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                stdin=slave_fd,
+                close_fds=True,
+                env=dict(os.environ, 
+                        PYTHONUNBUFFERED="1",  # Force Python to be unbuffered
+                        TERM="xterm-256color",  # Set terminal type
+                        FORCE_COLOR="1")  # Force color output
+            )
+
+            os.close(slave_fd)
+            self.active_processes[session_id] = (process, master_fd)
+            self._add_output(session_id, f"Teleoperation started for leader {leader_id} and follower {follower_id}")
+
+            thread = threading.Thread(
+                target=self._monitor_teleoperation_subprocess,
+                args=(session_id,),
+                daemon=True
+            )
+            thread.start()
+
+            logger.info(f"Started teleoperation process for {session_id}")
+            return session_id
+        except Exception as e:
+            logger.error(f"Failed to start teleoperation: {e}")
+            raise
+
+    def _monitor_teleoperation_subprocess(self, session_id: str):
+        try:
+            process, master_fd = self.active_processes[session_id]
+            self.active_sessions[session_id]["status"] = "running"
+            logger.info(f"Starting to monitor teleoperation (PTY) for {session_id}")
+            last_output_time = time.time()
+            while True:
+                if process.poll() is not None:
+                    logger.info(f"Process finished for {session_id}")
+                    break
+                ready, _, _ = select.select([master_fd], [], [], 0.05)
+                if ready:
+                    try:
+                        data = os.read(master_fd, 4096)
+                        if data:
+                            text_data = data.decode('utf-8', errors='ignore')
+                            lines = text_data.split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line:
+                                    self._add_output(session_id, line)
+                            last_output_time = time.time()
+                    except Exception as e:
+                        logger.error(f"PTY read error for {session_id}: {e}")
+                time.sleep(0.05)
+            # Process has finished
+            if process.poll() == 0:
+                if session_id in self.cancelled_sessions:
+                    self._add_output(session_id, "Teleoperation cancelled by user")
+                    logger.info(f"Teleoperation cancelled by user for {session_id}")
+                else:
+                    if session_id in self.active_sessions:
+                        self.active_sessions[session_id]["status"] = "completed"
+                    self._add_output(session_id, "Teleoperation completed successfully!")
+                    logger.info(f"Teleoperation completed successfully for {session_id}")
+            else:
+                if session_id in self.cancelled_sessions:
+                    self._add_output(session_id, "Teleoperation cancelled by user")
+                    logger.info(f"Teleoperation cancelled by user for {session_id}")
+                else:
+                    if session_id in self.active_sessions:
+                        self.active_sessions[session_id]["status"] = "failed"
+                    self._add_output(session_id, f"Teleoperation failed with exit code {process.poll()}")
+                    logger.error(f"Teleoperation failed for {session_id} with exit code {process.poll()}")
+        except Exception as e:
+            error_msg = f"Teleoperation monitoring error: {str(e)}"
+            logger.error(f"Teleoperation error for {session_id}: {e}")
+            if session_id in self.active_sessions:
+                self._add_output(session_id, error_msg)
+                self.active_sessions[session_id]["status"] = "failed"
+                self.active_sessions[session_id]["error"] = str(e)
+            else:
+                logger.warning(f"Session {session_id} was already cleaned up, skipping status update")
+
+    def _add_output(self, session_id: str, message: str):
+        if session_id in self.output_queues:
+            timestamp = datetime.now().isoformat()
+            output_data = {
+                "timestamp": timestamp,
+                "message": message
+            }
+            self.output_queues[session_id].put(output_data)
+            if session_id in self.active_sessions:
+                self.active_sessions[session_id]["output"].append(message)
+        else:
+            logger.error(f"No output queue found for {session_id}")
+
+    async def stop_teleoperation(self, session_id: str) -> bool:
+        try:
+            if session_id not in self.active_processes:
+                logger.warning(f"No active process found for {session_id}")
+                return False
+            self.cancelled_sessions.add(session_id)
+            logger.info(f"Marked session {session_id} as cancelled")
+            process, master_fd = self.active_processes[session_id]
+            if process.poll() is None:
+                logger.info(f"Terminating process for {session_id}")
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except:
+                    logger.warning(f"Force killing process for {session_id}")
+                    process.kill()
+                    process.wait(timeout=2)
+            if session_id in self.active_processes:
+                del self.active_processes[session_id]
+            if session_id in self.output_queues:
+                del self.output_queues[session_id]
+            if session_id in self.active_sessions:
+                del self.active_sessions[session_id]
+            logger.info(f"Stopped teleoperation process for {session_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to stop teleoperation {session_id}: {e}")
+            return False
+
+    async def is_running(self, session_id: str) -> bool:
+        if session_id not in self.active_sessions:
+            return False
+        session = self.active_sessions[session_id]
+        return session["status"] in ["starting", "running"]
+
+    async def get_all_output(self, session_id: str):
+        if session_id not in self.output_queues:
+            return []
+        outputs = []
+        while not self.output_queues[session_id].empty():
+            output_data = self.output_queues[session_id].get()
+            outputs.append(output_data["message"])
+        return outputs
+
+# Global instance
+teleoperation_service = TeleoperationService() 
