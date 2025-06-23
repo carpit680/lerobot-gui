@@ -139,6 +139,17 @@ async def list_ports():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list ports: {str(e)}")
 
+@app.get("/detect-ports")
+async def detect_ports():
+    """
+    Detect and return available USB ports (on-demand detection).
+    """
+    try:
+        result = await calibration_service.list_ports()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to detect ports: {str(e)}")
+
 # WebSocket endpoint for real-time output streaming
 @app.websocket("/ws/calibration/{session_id}")
 async def websocket_calibration(websocket: WebSocket, session_id: str):

@@ -21,102 +21,28 @@ export default function ArmConfiguration() {
   const scanUsbPorts = async () => {
     setIsScanning(true)
     try {
-      // Scan for real USB devices
-      const realPorts: UsbPort[] = []
-      
-      // Common USB serial device paths on Linux
-      const possiblePaths = [
-        '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2', '/dev/ttyUSB3',
-        '/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3',
-        '/dev/ttyS0', '/dev/ttyS1', '/dev/ttyS2', '/dev/ttyS3'
-      ]
-      
-      // Check which devices are actually connected
-      for (const path of possiblePaths) {
-        try {
-          // REAL IMPLEMENTATION NOTES:
-          // Since this runs in a browser, you have several options for real device detection:
-          //
-          // Option 1: Backend API
-          // - Create a backend service (Node.js/Python) that can access /dev/tty*
-          // - Use libraries like 'serialport' (Node.js) or 'pyserial' (Python)
-          // - Make API calls from this frontend to get device list
-          //
-          // Option 2: Electron App
-          // - Convert this to an Electron app to get Node.js access
-          // - Use 'serialport' library directly in the main process
-          //
-          // Option 3: Web Serial API (Chrome/Edge only)
-          // - Use navigator.serial.requestPort() for user-selected devices
-          // - Limited to user interaction, not automatic scanning
-          
-          // For now, we'll simulate device detection
-          // Replace this with actual implementation based on your setup
-          const deviceExists = await checkDeviceExists(path)
-          
-          if (deviceExists) {
-            realPorts.push({
-              path,
-              name: `USB Device (${path})`,
-              connected: true,
-              lastSeen: new Date()
-            })
-          }
-        } catch (error) {
-          // Device not accessible or doesn't exist
-          console.log(`Device ${path} not accessible:`, error)
-        }
+      // Fetch real USB devices from backend
+      const response = await fetch('http://localhost:8000/detect-ports')
+      if (!response.ok) {
+        throw new Error('Failed to fetch USB ports')
       }
-
-      // If no devices found, show empty state
+      const data = await response.json()
+      // data.ports is an array of port paths
+      const realPorts: UsbPort[] = (data.ports || []).map((path: string) => ({
+        path,
+        name: `USB Device (${path})`,
+        connected: true,
+        lastSeen: new Date()
+      }))
       setUsbPorts(realPorts)
-
     } catch (error) {
       console.error('Error scanning USB ports:', error)
       toast.error('Failed to scan USB ports')
+      setUsbPorts([])
     } finally {
       setIsScanning(false)
     }
   }
-
-  // Helper function to check if a device exists
-  // REPLACE THIS WITH ACTUAL DEVICE DETECTION
-  const checkDeviceExists = async (path: string): Promise<boolean> => {
-    // REAL IMPLEMENTATION EXAMPLES:
-    
-    // Option 1: Backend API call
-    // try {
-    //   const response = await fetch('/api/usb/devices')
-    //   const devices = await response.json()
-    //   return devices.some((device: any) => device.path === path)
-    // } catch (error) {
-    //   console.error('Failed to check device via API:', error)
-    //   return false
-    // }
-    
-    // Option 2: Electron main process (if using Electron)
-    // return window.electronAPI.checkDeviceExists(path)
-    
-    // Option 3: Web Serial API (limited to user interaction)
-    // const ports = await navigator.serial.getPorts()
-    // return ports.some(port => port.getInfo().usbProductId)
-    
-    // For now, simulate device detection
-    // This is where you would implement real device checking
-    const connectedDevices = ['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0']
-    return connectedDevices.includes(path)
-  }
-
-  // Auto-refresh USB ports every second
-  useEffect(() => {
-    const interval = setInterval(scanUsbPorts, 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Initial scan on component mount
-  useEffect(() => {
-    scanUsbPorts()
-  }, [])
 
   const handlePortChange = (armType: 'leader' | 'follower', port: string) => {
     setArmConfig({
@@ -134,6 +60,17 @@ export default function ArmConfiguration() {
             <p className="mt-2 text-gray-600">
               Configure the ports for your leader and follower robot arms
             </p>
+          </div>
+
+          {/* Scan for Ports Button */}
+          <div className="mb-6 flex justify-end">
+            <button
+              onClick={scanUsbPorts}
+              className="btn-primary px-4 py-2 rounded disabled:opacity-50"
+              disabled={isScanning}
+            >
+              {isScanning ? 'Scanning...' : 'Scan for Ports'}
+            </button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
