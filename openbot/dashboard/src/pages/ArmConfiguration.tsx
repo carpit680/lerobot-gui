@@ -119,9 +119,6 @@ export default function ArmConfiguration() {
   const handleScanCameras = async () => {
     setIsScanningCameras(true)
     try {
-      // Stop all camera streams before scanning
-      await stopAllCameraStreams()
-      
       const response = await fetch('http://localhost:8000/scan-cameras')
       if (!response.ok) throw new Error('Failed to scan cameras')
       const data = await response.json()
@@ -138,21 +135,33 @@ export default function ArmConfiguration() {
         fps: cam.fps || 30,
       }))
       
-      // Merge with existing cameras, preserving states
-      const existingCameras = new Map(cameraList.map(cam => [cam.id, cam]))
-      const mergedCameras = scannedCameras.map(scannedCam => {
-        const existing = existingCameras.get(scannedCam.id)
+      // Create a map of scanned cameras
+      const scannedCamerasMap = new Map(scannedCameras.map(cam => [cam.id, cam]))
+      
+      // Preserve existing cameras that are currently streaming
+      const existingCameras = cameraList.filter(cam => streamingCameras.has(cam.id))
+      
+      // Merge scanned cameras with existing streaming cameras
+      const mergedCameras = [
+        ...scannedCameras,
+        ...existingCameras.filter(existing => !scannedCamerasMap.has(existing.id))
+      ]
+      
+      // Preserve existing states for all cameras
+      const existingCamerasMap = new Map(cameraList.map(cam => [cam.id, cam]))
+      const finalCameras = mergedCameras.map(camera => {
+        const existing = existingCamerasMap.get(camera.id)
         if (existing) {
-          // Preserve existing enabled state and streaming state
+          // Preserve existing enabled state and other properties
           return {
-            ...scannedCam,
+            ...camera,
             enabled: existing.enabled,
           }
         }
-        return scannedCam
+        return camera
       })
       
-      setCameras(mergedCameras)
+      setCameras(finalCameras)
       toast.success('Cameras scanned')
     } catch (e) {
       toast.error('Failed to scan cameras')
