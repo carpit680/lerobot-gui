@@ -170,66 +170,45 @@ class TeleoperationService:
                             for line in lines:
                                 line = line.strip()
                                 if line:
-                                    logger.debug(f"Processing line: {line[:50]}...")
-                                    
-                                    # Debug: Check if this looks like a table line
-                                    if '.pos' in line or 'NAME' in line or 'NORM' in line or '---------------------------' in line:
-                                        logger.info(f"Potential table line detected: {line}")
-                                    
                                     # Check if this line starts a new table
                                     if '---------------------------' in line:
-                                        logger.info(f"Table separator detected for {session_id}: {line}")
                                         # If we were already in a table, send the previous one first
                                         if in_table and table_buffer:
                                             complete_table = '\n'.join(table_buffer)
-                                            logger.info(f"Sending previous table for {session_id}: {len(complete_table)} chars")
                                             processed_table = self._process_table_output(session_id, complete_table)
                                             if processed_table is not None:
                                                 self._add_output(session_id, processed_table)
-                                            else:
-                                                logger.warning(f"Previous table was filtered out for {session_id}")
                                         
                                         # Start of a new table
                                         in_table = True
                                         table_buffer = [line]
-                                        logger.info(f"Started new table buffer for {session_id}")
                                     elif in_table:
                                         # Continue accumulating table lines
                                         table_buffer.append(line)
-                                        logger.info(f"Added line to table buffer for {session_id}, buffer size: {len(table_buffer)}, line: {line}")
                                         
                                         # Check if this looks like the end of a table (contains timing info)
                                         if 'time:' in line and 'ms' in line and '(' in line:
                                             # End of table, send complete table
                                             complete_table = '\n'.join(table_buffer)
-                                            logger.info(f"Table end detected for {session_id}, sending complete table: {len(complete_table)} chars")
                                             processed_table = self._process_table_output(session_id, complete_table)
                                             if processed_table is not None:
                                                 self._add_output(session_id, processed_table)
-                                                logger.info(f"Table sent successfully for {session_id}")
-                                            else:
-                                                logger.warning(f"Complete table was filtered out for {session_id}")
                                             in_table = False
                                             table_buffer = []
                                         # Fallback: if we have a substantial table buffer and hit another separator, send it
                                         elif '---------------------------' in line and len(table_buffer) > 5:
                                             # We have a substantial table, send it
                                             complete_table = '\n'.join(table_buffer)
-                                            logger.info(f"Fallback table send for {session_id}, buffer size: {len(table_buffer)}")
                                             processed_table = self._process_table_output(session_id, complete_table)
                                             if processed_table is not None:
                                                 self._add_output(session_id, processed_table)
-                                                logger.info(f"Fallback table sent successfully for {session_id}")
                                             in_table = False
                                             table_buffer = [line]  # Start new table with this line
                                     else:
                                         # Non-table output, process normally
-                                        logger.debug(f"Non-table output for {session_id}: {line[:50]}...")
                                         processed_line = self._process_table_output(session_id, line)
                                         if processed_line is not None:
                                             self._add_output(session_id, processed_line)
-                                        else:
-                                            logger.debug(f"Filtered out line for {session_id}: {line[:50]}...")
                             last_output_time = time.time()
                     except Exception as e:
                         logger.error(f"PTY read error for {session_id}: {e}")
@@ -340,11 +319,8 @@ class TeleoperationService:
     async def get_latest_table(self, session_id: str):
         """Get the latest table output for a session"""
         if session_id in self.last_table_output:
-            table_data = self.last_table_output[session_id]
-            logger.info(f"Retrieved table data for {session_id}: {len(table_data)} chars")
-            return table_data
+            return self.last_table_output[session_id]
         else:
-            logger.debug(f"No table data available for {session_id}")
             return None
 
 # Global instance

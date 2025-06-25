@@ -145,287 +145,282 @@ export default function DatasetReplay() {
   const selectedDatasetData = datasets.find(d => d.id === selectedDataset)
 
   return (
-    <div className="lg:pl-72">
-      <div className="px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mx-auto max-w-7xl">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 font-heading">Dataset Replay</h1>
-            <p className="mt-2 text-gray-600">
-              Replay recorded datasets on the follower arm
-            </p>
-          </div>
+    <div className="px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 font-heading">Dataset Replay</h1>
+        <p className="mt-2 text-gray-600">
+          Replay recorded datasets to test and validate your robot arms
+        </p>
+      </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Video Player */}
-            <div className="lg:col-span-2">
-              <div className="card">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900 font-heading">Video Player</h2>
-                  {selectedDatasetData && (
-                    <div className="text-sm text-gray-600">
-                      {selectedDatasetData.name}
-                    </div>
-                  )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Video Player */}
+        <div className="lg:col-span-2">
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 font-heading">Video Player</h2>
+              {selectedDatasetData && (
+                <div className="text-sm text-gray-600">
+                  {selectedDatasetData.name}
                 </div>
-
-                <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center mb-4">
-                  {selectedDataset ? (
-                    <video
-                      ref={videoRef}
-                      className="w-full h-full object-cover rounded-lg"
-                      autoPlay={replayState.isPlaying && !replayState.isPaused}
-                      muted
-                      loop={replayState.loop}
-                    >
-                      <source src="/sample-video.mp4" type="video/mp4" />
-                      Your browser does not support the video tag.
-                    </video>
-                  ) : (
-                    <div className="text-gray-400 text-center">
-                      <EyeIcon className="h-12 w-12 mx-auto mb-2" />
-                      <p>No dataset selected</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Progress Bar */}
-                {selectedDataset && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm text-gray-600">
-                      <span>{formatTime(replayState.currentFrame)}</span>
-                      <span>{formatTime(replayState.totalFrames)}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-primary-600 h-2 rounded-full transition-all duration-100"
-                        style={{ width: `${formatProgress(replayState.currentFrame, replayState.totalFrames)}%` }}
-                      />
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max={replayState.totalFrames - 1}
-                      value={replayState.currentFrame}
-                      onChange={(e) => seekToFrame(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-                )}
-
-                {/* Playback Controls */}
-                <div className="flex items-center justify-center gap-4 mt-4">
-                  <button
-                    onClick={skipBackward}
-                    disabled={!selectedDataset}
-                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-                  >
-                    <BackwardIcon className="h-5 w-5" />
-                  </button>
-
-                  {!replayState.isPlaying ? (
-                    <button
-                      onClick={startReplay}
-                      disabled={!selectedDataset || !armConfig.followerConnected}
-                      className="btn-primary disabled:opacity-50"
-                    >
-                      <PlayIcon className="h-4 w-4 mr-2" />
-                      Start
-                    </button>
-                  ) : (
-                    <>
-                      {!replayState.isPaused ? (
-                        <button
-                          onClick={pauseReplay}
-                          className="btn-secondary"
-                        >
-                          <PauseIcon className="h-4 w-4 mr-2" />
-                          Pause
-                        </button>
-                      ) : (
-                        <button
-                          onClick={resumeReplay}
-                          className="btn-primary"
-                        >
-                          <PlayIcon className="h-4 w-4 mr-2" />
-                          Resume
-                        </button>
-                      )}
-                      <button
-                        onClick={stopReplay}
-                        className="btn-danger"
-                      >
-                        <StopIcon className="h-4 w-4 mr-2" />
-                        Stop
-                      </button>
-                    </>
-                  )}
-
-                  <button
-                    onClick={skipForward}
-                    disabled={!selectedDataset}
-                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-                  >
-                    <ForwardIcon className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Control Panel */}
-            <div className="space-y-6">
-              {/* Dataset Selection */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Dataset Selection</h3>
-                
-                <div className="space-y-3">
-                  {datasets.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No datasets available</p>
-                  ) : (
-                    datasets.map(dataset => (
-                      <div
-                        key={dataset.id}
-                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                          selectedDataset === dataset.id
-                            ? 'border-primary-300 bg-primary-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                        onClick={() => setSelectedDataset(dataset.id)}
-                      >
-                        <h4 className="font-medium text-gray-900 truncate">
-                          {dataset.name}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          {dataset.frameCount} frames • {Math.round(dataset.duration / 60)} min
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(dataset.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    ))
-                  )}
+            <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center mb-4">
+              {selectedDataset ? (
+                <video
+                  ref={videoRef}
+                  className="w-full h-full object-cover rounded-lg"
+                  autoPlay={replayState.isPlaying && !replayState.isPaused}
+                  muted
+                  loop={replayState.loop}
+                >
+                  <source src="/sample-video.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <div className="text-gray-400 text-center">
+                  <EyeIcon className="h-12 w-12 mx-auto mb-2" />
+                  <p>No dataset selected</p>
                 </div>
-              </div>
+              )}
+            </div>
 
-              {/* Playback Settings */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Playback Settings</h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Playback Speed
-                    </label>
-                    <select
-                      value={replayState.playbackSpeed}
-                      onChange={(e) => setReplayState(prev => ({ 
-                        ...prev, 
-                        playbackSpeed: Number(e.target.value) 
-                      }))}
-                      className="input-field"
+            {/* Progress Bar */}
+            {selectedDataset && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                  <span>{formatTime(replayState.currentFrame)}</span>
+                  <span>{formatTime(replayState.totalFrames)}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-primary-600 h-2 rounded-full transition-all duration-100"
+                    style={{ width: `${formatProgress(replayState.currentFrame, replayState.totalFrames)}%` }}
+                  />
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={replayState.totalFrames - 1}
+                  value={replayState.currentFrame}
+                  onChange={(e) => seekToFrame(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            )}
+
+            {/* Playback Controls */}
+            <div className="flex items-center justify-center gap-4 mt-4">
+              <button
+                onClick={skipBackward}
+                disabled={!selectedDataset}
+                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+              >
+                <BackwardIcon className="h-5 w-5" />
+              </button>
+
+              {!replayState.isPlaying ? (
+                <button
+                  onClick={startReplay}
+                  disabled={!selectedDataset || !armConfig.followerConnected}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  <PlayIcon className="h-4 w-4 mr-2" />
+                  Start
+                </button>
+              ) : (
+                <>
+                  {!replayState.isPaused ? (
+                    <button
+                      onClick={pauseReplay}
+                      className="btn-secondary"
                     >
-                      <option value={0.25}>0.25x (Slow)</option>
-                      <option value={0.5}>0.5x</option>
-                      <option value={1}>1x (Normal)</option>
-                      <option value={2}>2x (Fast)</option>
-                      <option value={4}>4x (Very Fast)</option>
-                    </select>
-                  </div>
+                      <PauseIcon className="h-4 w-4 mr-2" />
+                      Pause
+                    </button>
+                  ) : (
+                    <button
+                      onClick={resumeReplay}
+                      className="btn-primary"
+                    >
+                      <PlayIcon className="h-4 w-4 mr-2" />
+                      Resume
+                    </button>
+                  )}
+                  <button
+                    onClick={stopReplay}
+                    className="btn-danger"
+                  >
+                    <StopIcon className="h-4 w-4 mr-2" />
+                    Stop
+                  </button>
+                </>
+              )}
 
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="loop"
-                      checked={replayState.loop}
-                      onChange={(e) => setReplayState(prev => ({ 
-                        ...prev, 
-                        loop: e.target.checked 
-                      }))}
-                      className="mr-2"
-                    />
-                    <label htmlFor="loop" className="text-sm text-gray-700">
-                      Loop playback
-                    </label>
+              <button
+                onClick={skipForward}
+                disabled={!selectedDataset}
+                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+              >
+                <ForwardIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Control Panel */}
+        <div className="space-y-6">
+          {/* Dataset Selection */}
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Dataset Selection</h3>
+            
+            <div className="space-y-3">
+              {datasets.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No datasets available</p>
+              ) : (
+                datasets.map(dataset => (
+                  <div
+                    key={dataset.id}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedDataset === dataset.id
+                        ? 'border-primary-300 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => setSelectedDataset(dataset.id)}
+                  >
+                    <h4 className="font-medium text-gray-900 truncate">
+                      {dataset.name}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      {dataset.frameCount} frames • {Math.round(dataset.duration / 60)} min
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(dataset.createdAt).toLocaleDateString()}
+                    </p>
                   </div>
-                </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Playback Settings */}
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Playback Settings</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Playback Speed
+                </label>
+                <select
+                  value={replayState.playbackSpeed}
+                  onChange={(e) => setReplayState(prev => ({ 
+                    ...prev, 
+                    playbackSpeed: Number(e.target.value) 
+                  }))}
+                  className="input-field"
+                >
+                  <option value={0.25}>0.25x (Slow)</option>
+                  <option value={0.5}>0.5x</option>
+                  <option value={1}>1x (Normal)</option>
+                  <option value={2}>2x (Fast)</option>
+                  <option value={4}>4x (Very Fast)</option>
+                </select>
               </div>
 
-              {/* Replay Status */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Replay Status</h3>
-                
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Status:</span>
-                    <span className={`text-sm font-medium ${
-                      replayState.isPlaying && !replayState.isPaused ? 'text-green-600' :
-                      replayState.isPaused ? 'text-yellow-600' : 'text-gray-600'
-                    }`}>
-                      {replayState.isPlaying && !replayState.isPaused ? 'Playing' :
-                       replayState.isPaused ? 'Paused' : 'Stopped'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Progress:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {formatProgress(replayState.currentFrame, replayState.totalFrames)}%
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Frame:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {replayState.currentFrame.toLocaleString()} / {replayState.totalFrames.toLocaleString()}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Speed:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {replayState.playbackSpeed}x
-                    </span>
-                  </div>
-                </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="loop"
+                  checked={replayState.loop}
+                  onChange={(e) => setReplayState(prev => ({ 
+                    ...prev, 
+                    loop: e.target.checked 
+                  }))}
+                  className="mr-2"
+                />
+                <label htmlFor="loop" className="text-sm text-gray-700">
+                  Loop playback
+                </label>
               </div>
+            </div>
+          </div>
 
-              {/* System Status */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">System Status</h3>
-                
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Leader Arm:</span>
-                    <span className={armConfig.leaderConnected ? 'text-green-600' : 'text-red-600'}>
-                      {armConfig.leaderConnected ? 'Connected' : 'Disconnected'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Follower Arm:</span>
-                    <span className={armConfig.followerConnected ? 'text-green-600' : 'text-red-600'}>
-                      {armConfig.followerConnected ? 'Connected' : 'Disconnected'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Replay:</span>
-                    <span className={replayState.isPlaying ? 'text-green-600' : 'text-gray-600'}>
-                      {replayState.isPlaying ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </div>
+          {/* Replay Status */}
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Replay Status</h3>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Status:</span>
+                <span className={`text-sm font-medium ${
+                  replayState.isPlaying && !replayState.isPaused ? 'text-green-600' :
+                  replayState.isPaused ? 'text-yellow-600' : 'text-gray-600'
+                }`}>
+                  {replayState.isPlaying && !replayState.isPaused ? 'Playing' :
+                   replayState.isPaused ? 'Paused' : 'Stopped'}
+                </span>
               </div>
+              
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Progress:</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {formatProgress(replayState.currentFrame, replayState.totalFrames)}%
+                </span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Frame:</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {replayState.currentFrame.toLocaleString()} / {replayState.totalFrames.toLocaleString()}
+                </span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Speed:</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {replayState.playbackSpeed}x
+                </span>
+              </div>
+            </div>
+          </div>
 
-              {/* Replay Tips */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Replay Tips</h3>
-                <div className="space-y-2 text-sm text-gray-600">
-                  <p>• Ensure follower arm is connected and calibrated</p>
-                  <p>• Use playback speed controls to adjust replay speed</p>
-                  <p>• Use seek bar to jump to specific frames</p>
-                  <p>• Enable loop for continuous replay</p>
-                  <p>• Monitor arm movement during replay</p>
-                </div>
+          {/* System Status */}
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">System Status</h3>
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Leader Arm:</span>
+                <span className={armConfig.leaderConnected ? 'text-green-600' : 'text-red-600'}>
+                  {armConfig.leaderConnected ? 'Connected' : 'Disconnected'}
+                </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Follower Arm:</span>
+                <span className={armConfig.followerConnected ? 'text-green-600' : 'text-red-600'}>
+                  {armConfig.followerConnected ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Replay:</span>
+                <span className={replayState.isPlaying ? 'text-green-600' : 'text-gray-600'}>
+                  {replayState.isPlaying ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Replay Tips */}
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Replay Tips</h3>
+            <div className="space-y-2 text-sm text-gray-600">
+              <p>• Ensure follower arm is connected and calibrated</p>
+              <p>• Use playback speed controls to adjust replay speed</p>
+              <p>• Use seek bar to jump to specific frames</p>
+              <p>• Enable loop for continuous replay</p>
+              <p>• Monitor arm movement during replay</p>
             </div>
           </div>
         </div>

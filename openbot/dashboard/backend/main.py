@@ -429,21 +429,14 @@ async def websocket_teleoperation(websocket: WebSocket, session_id: str):
             # Get latest table data
             latest_table = await teleoperation_service.get_latest_table(session_id)
             if latest_table and latest_table != last_table_sent:
-                print(f"Sending table data for {session_id}: {len(latest_table)} chars")
                 try:
                     await websocket.send_text(json.dumps({
                         "type": "table",
                         "data": latest_table
                     }))
                     last_table_sent = latest_table
-                    print(f"Table sent successfully for {session_id}")
                 except Exception as e:
-                    print(f"Failed to send table for {session_id}: {e}")
                     break
-            elif latest_table:
-                print(f"Table data unchanged for {session_id}")
-            else:
-                print(f"No table data available for {session_id}")
             
             await asyncio.sleep(0.01)
     except WebSocketDisconnect:

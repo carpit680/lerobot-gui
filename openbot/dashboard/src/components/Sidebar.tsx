@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { Link, useLocation } from 'react-router-dom'
 import {
@@ -10,6 +10,8 @@ import {
   ChartBarIcon,
   PlayIcon,
   AcademicCapIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import { useLeRobotStore } from '../store/lerobotStore'
 
@@ -27,11 +29,17 @@ const navigation = [
 interface SidebarProps {
   open: boolean
   setOpen: (open: boolean) => void
+  isCollapsed: boolean
+  setIsCollapsed: (collapsed: boolean) => void
 }
 
-export default function Sidebar({ open, setOpen }: SidebarProps) {
+export default function Sidebar({ open, setOpen, isCollapsed, setIsCollapsed }: SidebarProps) {
   const location = useLocation()
   const { currentSession } = useLeRobotStore()
+
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed)
+  }
 
   return (
     <>
@@ -107,43 +115,60 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
       </Transition.Root>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
+      <div className={`hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:flex-col transition-all duration-300 ease-in-out ${
+        isCollapsed ? 'lg:w-16' : 'lg:w-72'
+      }`}>
         <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 bg-white px-6 pb-4">
-          <div className="flex h-16 shrink-0 items-center">
-            <a 
-              href="https://openbot.co.in" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 text-xl font-bold text-gray-900 hover:text-primary-600 transition-colors cursor-pointer font-heading"
+          <div className="flex h-16 shrink-0 items-center justify-between">
+            {!isCollapsed && (
+              <a 
+                href="https://openbot.co.in" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 text-xl font-bold text-gray-900 hover:text-primary-600 transition-colors cursor-pointer font-heading"
+              >
+                <img src="/logo_white.png" alt="OpenBot Logo" className="h-8 w-8" />
+                OpenBot
+              </a>
+            )}
+            <button
+              onClick={toggleCollapse}
+              className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              <img src="/logo_white.png" alt="OpenBot Logo" className="h-8 w-8" />
-              OpenBot
-            </a>
+              {isCollapsed ? (
+                <ChevronRightIcon className="h-5 w-5 text-gray-600" />
+              ) : (
+                <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
+              )}
+            </button>
           </div>
           
           {/* Status Indicators */}
-          <div className="space-y-3">
-            {currentSession.isRecording && (
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-sm text-red-600">Recording</span>
-              </div>
-            )}
-            
-            {currentSession.isReplaying && (
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                <span className="text-sm text-blue-600">Replaying</span>
-              </div>
-            )}
-            
-            {currentSession.isTeleoperating && (
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-sm text-green-600">Teleoperating</span>
-              </div>
-            )}
-          </div>
+          {!isCollapsed && (
+            <div className="space-y-3">
+              {currentSession.isRecording && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-sm text-red-600">Recording</span>
+                </div>
+              )}
+              
+              {currentSession.isReplaying && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  <span className="text-sm text-blue-600">Replaying</span>
+                </div>
+              )}
+              
+              {currentSession.isTeleoperating && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-sm text-green-600">Teleoperating</span>
+                </div>
+              )}
+            </div>
+          )}
           
           <nav className="flex flex-1 flex-col">
             <ul role="list" className="flex flex-1 flex-col gap-y-7">
@@ -154,15 +179,17 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
                       <Link
                         to={item.href}
                         className={`
-                          group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold
+                          group flex items-center rounded-md p-2 text-sm leading-6 font-semibold transition-all duration-200
+                          ${isCollapsed ? 'justify-center' : 'gap-x-3'}
                           ${location.pathname === item.href
                             ? 'bg-primary-50 text-primary-600'
                             : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                           }
                         `}
+                        title={isCollapsed ? item.name : undefined}
                       >
                         <item.icon className="h-6 w-6 shrink-0" aria-hidden="true" />
-                        {item.name}
+                        {!isCollapsed && item.name}
                       </Link>
                     </li>
                   ))}
