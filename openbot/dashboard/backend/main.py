@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
@@ -8,10 +8,16 @@ import logging
 from calibration_service import calibration_service
 from teleoperation_service import teleoperation_service
 import cv2
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import threading
 from fastapi import Response
 import time
+import subprocess
+import sys
+import os
+from motor_setup_service import MotorSetupService
+
+motor_setup_service = MotorSetupService()
 
 # Global camera stream tracking
 active_camera_streams = {}
@@ -48,6 +54,14 @@ class TeleoperationRequest(BaseModel):
     follower_port: str
     follower_id: str
     cameras: Optional[list] = None
+
+class MotorSetupRequest(BaseModel):
+    robot_type: str
+    port: str
+
+class MotorSetupInputRequest(BaseModel):
+    session_id: str
+    input_data: str
 
 @app.get("/")
 async def root():
@@ -487,6 +501,158 @@ async def get_camera_status(index: int):
     is_active = index in active_camera_streams
     return {"camera_index": index, "is_streaming": is_active}
 
+@app.post("/run-motor-setup")
+async def run_motor_setup(request: Request):
+    data = await request.json()
+    robot_type = data.get("type")
+    robot_port = data.get("port")
+    if not robot_type or not robot_port:
+        return JSONResponse(status_code=400, content={"error": "Missing type or port"})
+    try:
+        cmd = [
+            "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-u", "-m", "lerobot.setup_motors",
+            f"--robot.type={robot_type}",
+            f"--robot.port={robot_port}"
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        output = proc.stdout + ("\n" + proc.stderr if proc.stderr else "")
+        return {"output": output.strip()}
+    except subprocess.TimeoutExpired:
+        return JSONResponse(status_code=500, content={"error": "Command timed out."})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.websocket("/ws/motor-setup/{session_id}")
+async def websocket_motor_setup(websocket: WebSocket, session_id: str):
+    print(f"Motor setup WebSocket connection request for session {session_id}")
+    print(f"Session ID type: {type(session_id)}")
+    print(f"Session ID length: {len(session_id)}")
+    print(f"Session ID contains forward slashes: {'/' in session_id}")
+    
+    # Check if session exists
+    is_running = await motor_setup_service.is_running(session_id)
+    print(f"Session {session_id} is running: {is_running}")
+    
+    if not is_running:
+        print(f"Session {session_id} not found or not running, rejecting connection")
+        await websocket.close(code=4004, reason="Session not found")
+        return
+    
+    await websocket.accept()
+    print(f"Motor setup WebSocket connection opened for session {session_id}")
+    
+    message_count = 0
+    
+    try:
+        # Send initial connection message
+        initial_message = {
+            "type": "status",
+            "data": {"message": "WebSocket connected", "session_id": session_id}
+        }
+        print(f"Sending initial message: {initial_message}")
+        await websocket.send_text(json.dumps(initial_message))
+        print(f"Initial message sent successfully")
+        message_count += 1
+        
+        while True:
+            # Check if process is still running
+            is_running = await motor_setup_service.is_running(session_id)
+            
+            if not is_running:
+                # Process has finished
+                print(f"Motor setup process finished for {session_id}")
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "status",
+                        "data": {"is_running": False, "status": "finished"}
+                    }))
+                except Exception as e:
+                    print(f"Failed to send finish message for {session_id}: {e}")
+                break
+            
+            # Get all available output messages at once
+            outputs = await motor_setup_service.get_all_output(session_id)
+            if outputs:
+                print(f"Retrieved {len(outputs)} outputs for {session_id}")
+                for output in outputs:
+                    message_count += 1
+                    print(f"Sending output #{message_count} to WebSocket for {session_id}: {output}")
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "output",
+                            "data": output.strip()
+                        }))
+                    except Exception as e:
+                        print(f"Failed to send output message for {session_id}: {e}")
+                        # If we can't send, the connection is likely closed
+                        break
+            
+            # Wait a bit before checking again (reduced delay for more responsive output)
+            await asyncio.sleep(0.01)
+            
+    except WebSocketDisconnect:
+        print(f"Motor setup WebSocket disconnected for session {session_id}")
+    except Exception as e:
+        print(f"Motor setup WebSocket error for {session_id}: {e}")
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "data": str(e)
+            }))
+        except Exception as send_error:
+            print(f"Failed to send error message for {session_id}: {send_error}")
+    finally:
+        try:
+            await websocket.close()
+        except Exception as close_error:
+            print(f"Error closing motor setup WebSocket for {session_id}: {close_error}")
+        print(f"Motor setup WebSocket connection closed for session {session_id}, sent {message_count} messages total")
+
+@app.post("/motor-setup/start")
+async def start_motor_setup(request: MotorSetupRequest):
+    try:
+        session_id = await motor_setup_service.start_motor_setup(
+            robot_type=request.robot_type,
+            port=request.port
+        )
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message": f"Motor setup started for {request.robot_type}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start motor setup: {str(e)}")
+
+@app.get("/motor-setup/status/{session_id}")
+async def get_motor_setup_status(session_id: str):
+    try:
+        is_running = await motor_setup_service.is_running(session_id)
+        is_waiting_for_input = await motor_setup_service.is_waiting_for_input(session_id)
+        return {
+            "session_id": session_id,
+            "is_running": is_running,
+            "is_waiting_for_input": is_waiting_for_input,
+            "status": "running" if is_running else "finished"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+
+@app.post("/motor-setup/input")
+async def send_motor_setup_input(request: MotorSetupInputRequest):
+    try:
+        success = await motor_setup_service.send_input(request.session_id, request.input_data)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send input: {str(e)}")
+
+@app.delete("/motor-setup/stop/{session_id}")
+async def stop_motor_setup(session_id: str):
+    try:
+        success = await motor_setup_service.stop_motor_setup(session_id)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop motor setup: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(app, host="0.0.0.0", port=8000)

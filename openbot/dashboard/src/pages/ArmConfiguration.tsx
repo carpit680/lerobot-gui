@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLeRobotStore } from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 import {
@@ -22,6 +22,15 @@ export default function ArmConfiguration() {
   const [isScanningCameras, setIsScanningCameras] = useState(false)
   const [streamingCameras, setStreamingCameras] = useState<Set<string>>(new Set())
   const [streamTimestamps, setStreamTimestamps] = useState<Map<string, number>>(new Map())
+  const [motorConfigArm, setMotorConfigArm] = useState<'leader' | 'follower'>('leader');
+  const [motorConfigRobot, setMotorConfigRobot] = useState('SO-100');
+  const [isRunningMotorConfig, setIsRunningMotorConfig] = useState(false);
+  const [motorConfigOutput, setMotorConfigOutput] = useState('');
+  const [motorConfigWaiting, setMotorConfigWaiting] = useState(false);
+  const motorConfigPort = motorConfigArm === 'leader' ? armConfig.leaderPort : armConfig.followerPort;
+  let motorConfigSocket = useRef<WebSocket | null>(null);
+  const [motorConfigSessionId, setMotorConfigSessionId] = useState<string | null>(null);
+  const [isSendingMotorInput, setIsSendingMotorInput] = useState(false);
 
   useEffect(() => {
     setCameraList(cameras)
@@ -169,6 +178,111 @@ export default function ArmConfiguration() {
       setIsScanningCameras(false)
     }
   }
+
+  const getMotorConfigType = () => {
+    if (motorConfigRobot === 'SO-100') {
+      return motorConfigArm === 'leader' ? 'so100_leader' : 'so100_follower';
+    } else if (motorConfigRobot === 'Giraffe') {
+      return motorConfigArm === 'leader' ? 'giraffe_leader' : 'giraffe_follower';
+    }
+    return '';
+  };
+
+  async function runMotorConfigSession() {
+    setIsRunningMotorConfig(true);
+    setMotorConfigOutput('');
+    setMotorConfigWaiting(false);
+    setMotorConfigSessionId(null);
+    if (motorConfigSocket.current) {
+      motorConfigSocket.current.close();
+    }
+    // Start session
+    const resp = await fetch('http://localhost:8000/motor-setup/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        robot_type: getMotorConfigType(),
+        port: motorConfigPort,
+      })
+    });
+    if (!resp.ok) {
+      setMotorConfigOutput('Failed to start motor setup.');
+      setIsRunningMotorConfig(false);
+      return;
+    }
+    const data = await resp.json();
+    const sessionId = data.session_id;
+    setMotorConfigSessionId(sessionId);
+    // Open WebSocket
+    const ws = new WebSocket(`ws://localhost:8000/ws/motor-setup/${sessionId}`);
+    motorConfigSocket.current = ws;
+    ws.onopen = () => {
+      console.log('[MotorConfigWS] WebSocket opened');
+    };
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'output') {
+        setMotorConfigOutput(prev => prev + msg.data);
+        // Detect waiting for input in output
+        if (msg.data.toLowerCase().includes('press enter')) {
+          setMotorConfigWaiting(true);
+        }
+      }
+      if (msg.type === 'status' && msg.data.status === 'finished') {
+        setIsRunningMotorConfig(false);
+        setMotorConfigWaiting(false);
+        ws.close();
+      }
+      if (msg.type === 'error') {
+        setMotorConfigOutput(prev => prev + '\nERROR: ' + msg.data);
+        setIsRunningMotorConfig(false);
+        setMotorConfigWaiting(false);
+        ws.close();
+      }
+    };
+    ws.onerror = (e) => {
+      setMotorConfigOutput(prev => prev + '\nWebSocket error.');
+      setIsRunningMotorConfig(false);
+      setMotorConfigWaiting(false);
+      ws.close();
+      console.error('[MotorConfigWS] WebSocket error', e);
+    };
+    ws.onclose = (e) => {
+      console.log('[MotorConfigWS] WebSocket closed', e);
+    };
+  }
+
+  async function sendMotorConfigContinue() {
+    if (!motorConfigSessionId) return;
+    setIsSendingMotorInput(true);
+    await fetch('http://localhost:8000/motor-setup/input', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: motorConfigSessionId, input_data: '\n' })
+    });
+    setMotorConfigWaiting(false);
+    setIsSendingMotorInput(false);
+  }
+
+  async function cancelMotorConfig() {
+    if (!motorConfigSessionId) return;
+    await fetch(`http://localhost:8000/motor-setup/stop/${motorConfigSessionId}`, { method: 'DELETE' });
+    setIsRunningMotorConfig(false);
+    setMotorConfigWaiting(false);
+    setMotorConfigSessionId(null);
+    setMotorConfigOutput('[INFO] Motor setup cancelled by user');
+    if (motorConfigSocket.current) {
+      motorConfigSocket.current.close();
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (motorConfigSocket.current) {
+        motorConfigSocket.current.close();
+      }
+    };
+  }, []);
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
@@ -377,6 +491,73 @@ export default function ArmConfiguration() {
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Motor Configuration Section */}
+      <div className="mt-8">
+        <div className="card">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Motor Configuration</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+            {/* Arm Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Arm</label>
+              <select
+                value={motorConfigArm}
+                onChange={e => setMotorConfigArm(e.target.value as 'leader' | 'follower')}
+                className="input-field"
+              >
+                <option value="leader">Leader Arm</option>
+                <option value="follower">Follower Arm</option>
+              </select>
+            </div>
+            {/* Robot Type Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Robot Type</label>
+              <select
+                value={motorConfigRobot}
+                onChange={e => setMotorConfigRobot(e.target.value)}
+                className="input-field"
+              >
+                <option value="SO-100">SO-100</option>
+                <option value="Giraffe">Giraffe</option>
+              </select>
+            </div>
+            {/* Run Button */}
+            <div>
+              <button
+                className="btn-primary w-full"
+                disabled={isRunningMotorConfig || !motorConfigPort}
+                onClick={runMotorConfigSession}
+              >
+                {isRunningMotorConfig ? 'Running...' : 'Run Motor Setup'}
+              </button>
+            </div>
+          </div>
+          {/* Output */}
+          {motorConfigOutput && (
+            <div className="mt-4 p-3 bg-gray-100 rounded text-sm font-mono whitespace-pre-wrap max-h-64 overflow-auto border">
+              {motorConfigOutput}
+            </div>
+          )}
+          {motorConfigWaiting && (
+            <button
+              className="btn-primary bg-yellow-600 hover:bg-yellow-700 border-yellow-600 w-full mt-2"
+              onClick={sendMotorConfigContinue}
+              disabled={isSendingMotorInput}
+            >
+              {isSendingMotorInput ? 'Sending...' : 'Continue'}
+            </button>
+          )}
+          {isRunningMotorConfig && (
+            <button
+              className="btn-secondary bg-red-600 hover:bg-red-700 border-red-600 text-white w-full mt-2"
+              onClick={cancelMotorConfig}
+              disabled={isSendingMotorInput}
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
     </div>
