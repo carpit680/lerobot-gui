@@ -9,6 +9,7 @@ import pty
 import select
 import time
 import json
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,37 @@ class TeleoperationService:
         self.output_queues = {}     # session_id -> Queue
         self.active_processes = {}  # session_id -> (process, master_fd)
         self.cancelled_sessions = set()  # Track cancelled sessions
+        self.last_table_output = {}  # Track last table output per session
+
+    def _clean_ansi_codes(self, text: str) -> str:
+        """Remove ANSI escape codes from text"""
+        # Remove ANSI escape sequences
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return ansi_escape.sub('', text)
+
+    def _process_table_output(self, session_id: str, text: str) -> str:
+        """Process table output to avoid repetition"""
+        cleaned_text = self._clean_ansi_codes(text)
+        
+        # Skip empty lines
+        if not cleaned_text.strip():
+            return None
+            
+        # Check if this is a complete table (contains table separator and timing info)
+        if '---------------------------' in cleaned_text and 'time:' in cleaned_text:
+            # This is a complete table, store it and return it
+            self.last_table_output[session_id] = cleaned_text
+            return cleaned_text
+        elif ('---------------------------' in cleaned_text or 
+              '.pos' in cleaned_text or 
+              'NAME' in cleaned_text or 
+              'NORM' in cleaned_text or
+              (cleaned_text.startswith('time:') and 'ms' in cleaned_text and '(' in cleaned_text)):
+            # This is a table line or timing line, don't send it as individual output
+            return None
+        else:
+            # For non-table output, return as is
+            return cleaned_text
 
     async def start_teleoperation(self, leader_type: str, leader_port: str, leader_id: str,
                                   follower_type: str, follower_port: str, follower_id: str,
@@ -121,6 +153,9 @@ class TeleoperationService:
             self.active_sessions[session_id]["status"] = "running"
             logger.info(f"Starting to monitor teleoperation (PTY) for {session_id}")
             last_output_time = time.time()
+            table_buffer = []
+            in_table = False
+            
             while True:
                 if process.poll() is not None:
                     logger.info(f"Process finished for {session_id}")
@@ -135,7 +170,66 @@ class TeleoperationService:
                             for line in lines:
                                 line = line.strip()
                                 if line:
-                                    self._add_output(session_id, line)
+                                    logger.debug(f"Processing line: {line[:50]}...")
+                                    
+                                    # Debug: Check if this looks like a table line
+                                    if '.pos' in line or 'NAME' in line or 'NORM' in line or '---------------------------' in line:
+                                        logger.info(f"Potential table line detected: {line}")
+                                    
+                                    # Check if this line starts a new table
+                                    if '---------------------------' in line:
+                                        logger.info(f"Table separator detected for {session_id}: {line}")
+                                        # If we were already in a table, send the previous one first
+                                        if in_table and table_buffer:
+                                            complete_table = '\n'.join(table_buffer)
+                                            logger.info(f"Sending previous table for {session_id}: {len(complete_table)} chars")
+                                            processed_table = self._process_table_output(session_id, complete_table)
+                                            if processed_table is not None:
+                                                self._add_output(session_id, processed_table)
+                                            else:
+                                                logger.warning(f"Previous table was filtered out for {session_id}")
+                                        
+                                        # Start of a new table
+                                        in_table = True
+                                        table_buffer = [line]
+                                        logger.info(f"Started new table buffer for {session_id}")
+                                    elif in_table:
+                                        # Continue accumulating table lines
+                                        table_buffer.append(line)
+                                        logger.info(f"Added line to table buffer for {session_id}, buffer size: {len(table_buffer)}, line: {line}")
+                                        
+                                        # Check if this looks like the end of a table (contains timing info)
+                                        if 'time:' in line and 'ms' in line and '(' in line:
+                                            # End of table, send complete table
+                                            complete_table = '\n'.join(table_buffer)
+                                            logger.info(f"Table end detected for {session_id}, sending complete table: {len(complete_table)} chars")
+                                            processed_table = self._process_table_output(session_id, complete_table)
+                                            if processed_table is not None:
+                                                self._add_output(session_id, processed_table)
+                                                logger.info(f"Table sent successfully for {session_id}")
+                                            else:
+                                                logger.warning(f"Complete table was filtered out for {session_id}")
+                                            in_table = False
+                                            table_buffer = []
+                                        # Fallback: if we have a substantial table buffer and hit another separator, send it
+                                        elif '---------------------------' in line and len(table_buffer) > 5:
+                                            # We have a substantial table, send it
+                                            complete_table = '\n'.join(table_buffer)
+                                            logger.info(f"Fallback table send for {session_id}, buffer size: {len(table_buffer)}")
+                                            processed_table = self._process_table_output(session_id, complete_table)
+                                            if processed_table is not None:
+                                                self._add_output(session_id, processed_table)
+                                                logger.info(f"Fallback table sent successfully for {session_id}")
+                                            in_table = False
+                                            table_buffer = [line]  # Start new table with this line
+                                    else:
+                                        # Non-table output, process normally
+                                        logger.debug(f"Non-table output for {session_id}: {line[:50]}...")
+                                        processed_line = self._process_table_output(session_id, line)
+                                        if processed_line is not None:
+                                            self._add_output(session_id, processed_line)
+                                        else:
+                                            logger.debug(f"Filtered out line for {session_id}: {line[:50]}...")
                             last_output_time = time.time()
                     except Exception as e:
                         logger.error(f"PTY read error for {session_id}: {e}")
@@ -176,9 +270,21 @@ class TeleoperationService:
                 "timestamp": timestamp,
                 "message": message
             }
-            self.output_queues[session_id].put(output_data)
-            if session_id in self.active_sessions:
-                self.active_sessions[session_id]["output"].append(message)
+            
+            # Check if this is a table output
+            if '---------------------------' in message:
+                # For table outputs, only store in active_sessions, don't add to queue
+                if session_id in self.active_sessions:
+                    stored_output = self.active_sessions[session_id]["output"]
+                    # Remove all previous table outputs from stored output
+                    stored_output[:] = [line for line in stored_output if '---------------------------' not in line]
+                    # Add the new table output
+                    stored_output.append(message)
+            else:
+                # For non-table output, add to queue and stored output
+                self.output_queues[session_id].put(output_data)
+                if session_id in self.active_sessions:
+                    self.active_sessions[session_id]["output"].append(message)
         else:
             logger.error(f"No output queue found for {session_id}")
 
@@ -205,6 +311,8 @@ class TeleoperationService:
                 del self.output_queues[session_id]
             if session_id in self.active_sessions:
                 del self.active_sessions[session_id]
+            if session_id in self.last_table_output:
+                del self.last_table_output[session_id]
             logger.info(f"Stopped teleoperation process for {session_id}")
             return True
         except Exception as e:
@@ -221,10 +329,23 @@ class TeleoperationService:
         if session_id not in self.output_queues:
             return []
         outputs = []
+        
+        # Collect all outputs from the queue
         while not self.output_queues[session_id].empty():
             output_data = self.output_queues[session_id].get()
             outputs.append(output_data["message"])
+        
         return outputs
+
+    async def get_latest_table(self, session_id: str):
+        """Get the latest table output for a session"""
+        if session_id in self.last_table_output:
+            table_data = self.last_table_output[session_id]
+            logger.info(f"Retrieved table data for {session_id}: {len(table_data)} chars")
+            return table_data
+        else:
+            logger.debug(f"No table data available for {session_id}")
+            return None
 
 # Global instance
 teleoperation_service = TeleoperationService() 

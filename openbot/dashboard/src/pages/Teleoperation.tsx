@@ -2,13 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useLeRobotStore } from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 import {
-  VideoCameraIcon,
   PlayIcon,
   StopIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
 } from '@heroicons/react/24/outline'
 
 const BACKEND_URL = 'http://localhost:8000'
@@ -21,7 +16,6 @@ const robotTypes = [
 export default function Teleoperation() {
   const { armConfig, cameras } = useLeRobotStore()
   const [isTeleoperating, setIsTeleoperating] = useState(false)
-  const [selectedCamera, setSelectedCamera] = useState<string>('')
   const [leaderType, setLeaderType] = useState('giraffe')
   const [followerType, setFollowerType] = useState('giraffe')
   const [leaderId, setLeaderId] = useState('giraffe_leader')
@@ -32,16 +26,44 @@ export default function Teleoperation() {
   const [isRunning, setIsRunning] = useState(false)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
   const [selectedCameras, setSelectedCameras] = useState<string[]>([])
+  const [jointPositions, setJointPositions] = useState<{[key: string]: number}>({})
+  const [lastUpdateTime, setLastUpdateTime] = useState<string>('')
+  const [updateFrequency, setUpdateFrequency] = useState<string>('')
 
-  const videoRef = useRef<HTMLVideoElement>(null)
+  // Function to parse table data and extract joint positions
+  const parseTableData = (tableText: string) => {
+    const lines = tableText.split('\n')
+    const positions: {[key: string]: number} = {}
+    let timeInfo = ''
+    let freqInfo = ''
 
-  useEffect(() => {
-    // Set first enabled camera as default
-    const enabledCamera = cameras.find(c => c.enabled)
-    if (enabledCamera) {
-      setSelectedCamera(enabledCamera.id)
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      
+      // Parse joint positions (format: "joint_name.pos  |  value")
+      if (trimmedLine.includes('.pos') && trimmedLine.includes('|')) {
+        const parts = trimmedLine.split('|')
+        if (parts.length === 2) {
+          const jointName = parts[0].trim().replace('.pos', '')
+          const value = parseFloat(parts[1].trim())
+          if (!isNaN(value)) {
+            positions[jointName] = value
+          }
+        }
+      }
+      
+      // Parse timing information (format: "time: Xms (Y Hz)")
+      if (trimmedLine.startsWith('time:')) {
+        const timeMatch = trimmedLine.match(/time:\s*([\d.]+)ms\s*\(([\d.]+)\s*Hz\)/)
+        if (timeMatch) {
+          timeInfo = `${timeMatch[1]}ms`
+          freqInfo = `${timeMatch[2]} Hz`
+        }
+      }
     }
-  }, [cameras])
+
+    return { positions, timeInfo, freqInfo }
+  }
 
   useEffect(() => {
     checkBackendConnection()
@@ -149,8 +171,32 @@ export default function Teleoperation() {
     }
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      console.log(`WebSocket message received: ${data.type}`, data.data?.substring(0, 100))
+      
       if (data.type === 'output') {
-        setOutput(prev => [...prev, data.data])
+        // Regular output (non-table) - add to status log
+        const output = data.data
+        // Filter out table-related lines from status log
+        if (!output.includes('.pos') && 
+            !output.includes('NAME') && 
+            !output.includes('NORM') && 
+            !output.includes('---------------------------') &&
+            !output.includes('time:') &&
+            !output.includes('ms') &&
+            !output.includes('Hz')) {
+          console.log('Adding to status log:', output)
+          setOutput(prev => [...prev, output])
+        } else {
+          console.log('Filtered out table/timing data from status log')
+        }
+      } else if (data.type === 'table') {
+        console.log('Received table data, parsing...')
+        // Table data - parse and update joint positions
+        const { positions, timeInfo, freqInfo } = parseTableData(data.data)
+        console.log('Parsed positions:', positions)
+        setJointPositions(positions)
+        setLastUpdateTime(timeInfo)
+        setUpdateFrequency(freqInfo)
       } else if (data.type === 'status') {
         if (data.data.status === 'finished') {
           setIsRunning(false)
@@ -169,8 +215,6 @@ export default function Teleoperation() {
     }
   }
 
-  const enabledCameras = cameras.filter(c => c.enabled)
-
   return (
     <div className="lg:pl-72">
       <div className="px-4 sm:px-6 lg:px-8 py-8">
@@ -182,164 +226,217 @@ export default function Teleoperation() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Camera Feed */}
-            <div className="lg:col-span-2">
-              <div className="card">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900 font-heading">Camera Feed</h2>
-                  <div className="flex items-center gap-2">
-                    <VideoCameraIcon className="h-5 w-5 text-gray-500" />
-                    <select
-                      value={selectedCamera}
-                      onChange={(e) => setSelectedCamera(e.target.value)}
-                      className="input-field w-auto"
-                    >
-                      {enabledCameras.map(camera => (
-                        <option key={camera.id} value={camera.id}>
-                          {camera.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
-                  {selectedCamera ? (
-                    <video
-                      ref={videoRef}
-                      className="w-full h-full object-cover rounded-lg"
-                      autoPlay
-                      muted
-                      loop
-                    >
-                      <source src={cameras.find(c => c.id === selectedCamera)?.url} type="video/mp4" />
-                      Your browser does not support the video tag.
-                    </video>
-                  ) : (
-                    <div className="text-gray-400 text-center">
-                      <VideoCameraIcon className="h-12 w-12 mx-auto mb-2" />
-                      <p>No camera selected</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Teleoperation Config & Output */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Teleoperation Configuration */}
             <div className="space-y-6">
-              <div className="card space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Teleoperation Configuration</h3>
-                {/* Leader Config */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Leader Arm Type</label>
-                  <select
-                    value={leaderType}
-                    onChange={e => setLeaderType(e.target.value)}
-                    className="input-field"
-                    disabled={isTeleoperating}
-                  >
-                    {robotTypes.map(robot => (
-                      <option key={robot.id} value={robot.id}>{robot.name} - {robot.description}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Leader Arm Port</label>
-                  <div className="input-field bg-gray-100 text-gray-700 cursor-not-allowed">
-                    {armConfig.leaderPort || <span className="text-gray-400">Not configured</span>}
+              <div className="card">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuration</h3>
+                
+                {/* Leader Arm Configuration */}
+                <div className="mb-6">
+                  <h4 className="text-md font-medium text-gray-800 mb-3 border-b pb-2">Leader Arm</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Arm Type</label>
+                      <select
+                        value={leaderType}
+                        onChange={e => setLeaderType(e.target.value)}
+                        className="input-field"
+                        disabled={isTeleoperating}
+                      >
+                        {robotTypes.map(robot => (
+                          <option key={robot.id} value={robot.id}>{robot.name} - {robot.description}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                      <div className="input-field bg-gray-100 text-gray-700 cursor-not-allowed">
+                        {armConfig.leaderPort || <span className="text-gray-400">Not configured</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
+                      <input
+                        type="text"
+                        value={leaderId}
+                        onChange={e => setLeaderId(e.target.value)}
+                        className="input-field"
+                        disabled={isTeleoperating}
+                        placeholder="Enter leader arm ID"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Leader Arm ID</label>
-                  <input
-                    type="text"
-                    value={leaderId}
-                    onChange={e => setLeaderId(e.target.value)}
-                    className="input-field"
-                    disabled={isTeleoperating}
-                  />
-                </div>
-                {/* Follower Config */}
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Follower Arm Type</label>
-                  <select
-                    value={followerType}
-                    onChange={e => setFollowerType(e.target.value)}
-                    className="input-field"
-                    disabled={isTeleoperating}
-                  >
-                    {robotTypes.map(robot => (
-                      <option key={robot.id} value={robot.id}>{robot.name} - {robot.description}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Follower Arm Port</label>
-                  <div className="input-field bg-gray-100 text-gray-700 cursor-not-allowed">
-                    {armConfig.followerPort || <span className="text-gray-400">Not configured</span>}
+
+                {/* Follower Arm Configuration */}
+                <div className="mb-6">
+                  <h4 className="text-md font-medium text-gray-800 mb-3 border-b pb-2">Follower Arm</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Arm Type</label>
+                      <select
+                        value={followerType}
+                        onChange={e => setFollowerType(e.target.value)}
+                        className="input-field"
+                        disabled={isTeleoperating}
+                      >
+                        {robotTypes.map(robot => (
+                          <option key={robot.id} value={robot.id}>{robot.name} - {robot.description}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                      <div className="input-field bg-gray-100 text-gray-700 cursor-not-allowed">
+                        {armConfig.followerPort || <span className="text-gray-400">Not configured</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
+                      <input
+                        type="text"
+                        value={followerId}
+                        onChange={e => setFollowerId(e.target.value)}
+                        className="input-field"
+                        disabled={isTeleoperating}
+                        placeholder="Enter follower arm ID"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Follower Arm ID</label>
-                  <input
-                    type="text"
-                    value={followerId}
-                    onChange={e => setFollowerId(e.target.value)}
-                    className="input-field"
-                    disabled={isTeleoperating}
-                  />
-                </div>
+
                 {/* Camera Selection */}
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Cameras</label>
+                <div className="mb-6">
+                  <h4 className="text-md font-medium text-gray-800 mb-3 border-b pb-2">Cameras</h4>
                   <div className="space-y-2">
                     {cameras.filter(c => c.enabled).length === 0 ? (
                       <p className="text-sm text-gray-500">No enabled cameras found. Configure cameras in Arm Configuration.</p>
                     ) : (
-                      cameras.filter(c => c.enabled).map(camera => (
-                        <label key={camera.id} className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={selectedCameras.includes(camera.id)}
-                            onChange={() => handleCameraToggle(camera.id)}
-                            disabled={isTeleoperating}
-                            className="rounded"
-                          />
-                          <span className="text-sm text-gray-700">{camera.name}</span>
-                        </label>
-                      ))
+                      <div className="grid grid-cols-2 gap-3">
+                        {cameras.filter(c => c.enabled).map(camera => (
+                          <label key={camera.id} className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedCameras.includes(camera.id)}
+                              onChange={() => handleCameraToggle(camera.id)}
+                              disabled={isTeleoperating}
+                              className="rounded"
+                            />
+                            <span className="text-sm text-gray-700 truncate">{camera.name}</span>
+                          </label>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
-                <div className="flex gap-4 mt-4">
+
+                {/* Control Buttons */}
+                <div className="flex gap-4 pt-4 border-t">
                   <button
                     onClick={startTeleoperation}
                     disabled={isTeleoperating || !armConfig.leaderPort || !armConfig.followerPort || !leaderId.trim() || !followerId.trim() || backendConnected === false}
-                    className="btn-primary w-32 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <PlayIcon className="h-4 w-4 mr-2" />
-                    Start
+                    Start Teleoperation
                   </button>
                   <button
                     onClick={stopTeleoperation}
                     disabled={!isTeleoperating}
-                    className="btn-danger w-32 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn-danger flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <StopIcon className="h-4 w-4 mr-2" />
                     Stop
                   </button>
                 </div>
               </div>
-              {/* Output */}
+            </div>
+
+            {/* Teleoperation Output */}
+            <div className="space-y-6">
               <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Teleoperation Output</h3>
-                <div className="h-48 overflow-y-auto bg-gray-100 rounded p-2 text-xs font-mono whitespace-pre-wrap">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Joint Positions</h3>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${backendConnected === true ? 'bg-green-500' : backendConnected === false ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
+                    <span className="text-sm text-gray-600">
+                      {backendConnected === true ? 'Connected' : backendConnected === false ? 'Disconnected' : 'Checking...'}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Joint Positions Table */}
+                <div className="bg-white border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Joint</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Position</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {Object.keys(jointPositions).length > 0 ? (
+                        Object.entries(jointPositions).map(([joint, position]) => (
+                          <tr key={joint} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                              {joint.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">
+                              {position.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={2} className="px-4 py-8 text-center text-gray-500">
+                            <div className="flex flex-col items-center">
+                              <div className="w-8 h-8 bg-gray-200 rounded-full mb-2"></div>
+                              <p>No joint data available</p>
+                              <p className="text-xs mt-1">Start teleoperation to see joint positions</p>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Timing Information */}
+                {(lastUpdateTime || updateFrequency) && (
+                  <div className="mt-4 flex justify-between text-xs text-gray-500">
+                    <span>Update Time: {lastUpdateTime}</span>
+                    <span>Frequency: {updateFrequency}</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Status Log */}
+              <div className="card">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Status Log</h3>
+                <div className="h-32 overflow-y-auto bg-gray-100 rounded p-3 text-xs font-mono whitespace-pre-wrap border">
                   {output.length === 0 ? (
-                    <span className="text-gray-400">No output yet.</span>
+                    <div className="text-gray-400 text-center py-4">
+                      <p>No status messages yet.</p>
+                      <p className="text-xs mt-1">Start teleoperation to see logs here.</p>
+                    </div>
                   ) : (
-                    output.map((line, idx) => <div key={idx}>{line}</div>)
+                    <div className="space-y-1">
+                      {output.map((line, idx) => (
+                        <div key={idx} className="py-1 border-b border-gray-200 last:border-b-0">
+                          <pre className="whitespace-pre font-mono text-xs leading-tight overflow-x-auto">
+                            {line}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
+                {output.length > 0 && (
+                  <div className="mt-2 text-xs text-gray-500 text-right">
+                    {output.length} log entries
+                  </div>
+                )}
               </div>
             </div>
           </div>
