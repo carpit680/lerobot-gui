@@ -170,104 +170,96 @@ export default function ArmConfiguration() {
         </p>
       </div>
 
-      {/* Scan for Ports Button */}
-      <div className="mb-6 flex justify-end">
-        <button
-          onClick={scanUsbPorts}
-          className="btn-primary px-4 py-2 rounded disabled:opacity-50"
-          disabled={isScanning}
-        >
-          {isScanning ? 'Scanning...' : 'Scan for Ports'}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="card">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <CogIcon className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 font-heading">Leader Arm</h2>
-              <p className="text-sm text-gray-600">Primary control arm</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Port
-              </label>
-              <select
-                value={armConfig.leaderPort}
-                onChange={(e) => handlePortChange('leader', e.target.value)}
-                className="input-field"
-                disabled={isScanning}
-              >
-                <option value="">{isScanning ? 'Scanning...' : 'Select Leader Arm Port'}</option>
-                {usbPorts.map((port) => (
-                  <option key={port.path} value={port.path}>
-                    {port.name} ({port.path})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="text-sm text-gray-600">
-              <p>Current port: <span className="font-medium">{armConfig.leaderPort || 'Not selected'}</span></p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <CogIcon className="h-6 w-6 text-green-600" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 font-heading">Follower Arm</h2>
-              <p className="text-sm text-gray-600">Secondary controlled arm</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Port
-              </label>
-              <select
-                value={armConfig.followerPort}
-                onChange={(e) => handlePortChange('follower', e.target.value)}
-                className="input-field"
-                disabled={isScanning}
-              >
-                <option value="">{isScanning ? 'Scanning...' : 'Select Follower Arm Port'}</option>
-                {usbPorts.map((port) => (
-                  <option key={port.path} value={port.path}>
-                    {port.name} ({port.path})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="text-sm text-gray-600">
-              <p>Current port: <span className="font-medium">{armConfig.followerPort || 'Not selected'}</span></p>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      {/* Arm Configuration Section */}
       <div className="mt-8">
         <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuration Summary</h3>
-          <div className="space-y-3 text-sm text-gray-600">
-            <p>• Leader Arm Port: <span className="font-medium text-gray-900">{armConfig.leaderPort || 'Not configured'}</span></p>
-            <p>• Follower Arm Port: <span className="font-medium text-gray-900">{armConfig.followerPort || 'Not configured'}</span></p>
-            <p>• These ports will be used for all arm operations throughout the application</p>
-            <p>• Make sure your arms are connected to the selected ports before using other features</p>
-            {usbPorts.length === 0 && (
-              <p className="text-orange-600">• No USB devices currently detected. Please connect your arms and refresh.</p>
-            )}
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Arm Configuration</h3>
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <button
+                onClick={scanUsbPorts}
+                className="btn-primary px-4 py-2 rounded disabled:opacity-50"
+                disabled={isScanning}
+              >
+                {isScanning ? 'Scanning...' : 'Scan for Ports'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <CogIcon className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 font-heading">Leader Arm</h2>
+                    <p className="text-sm text-gray-600">Primary control arm</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Port
+                    </label>
+                    <select
+                      value={armConfig.leaderPort}
+                      onChange={(e) => handlePortChange('leader', e.target.value)}
+                      className="input-field"
+                      disabled={isScanning}
+                    >
+                      <option value="">{isScanning ? 'Scanning...' : 'Select Leader Arm Port'}</option>
+                      {usbPorts.map((port) => (
+                        <option key={port.path} value={port.path}>
+                          {port.name} ({port.path})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="text-sm text-gray-600">
+                    <p>Current port: <span className="font-medium">{armConfig.leaderPort || 'Not selected'}</span></p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <CogIcon className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 font-heading">Follower Arm</h2>
+                    <p className="text-sm text-gray-600">Secondary controlled arm</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Port
+                    </label>
+                    <select
+                      value={armConfig.followerPort}
+                      onChange={(e) => handlePortChange('follower', e.target.value)}
+                      className="input-field"
+                      disabled={isScanning}
+                    >
+                      <option value="">{isScanning ? 'Scanning...' : 'Select Follower Arm Port'}</option>
+                      {usbPorts.map((port) => (
+                        <option key={port.path} value={port.path}>
+                          {port.name} ({port.path})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="text-sm text-gray-600">
+                    <p>Current port: <span className="font-medium">{armConfig.followerPort || 'Not selected'}</span></p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
