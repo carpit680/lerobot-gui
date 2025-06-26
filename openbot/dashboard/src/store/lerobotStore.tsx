@@ -6,11 +6,6 @@ export interface ArmConfig {
   followerPort: string
   leaderConnected: boolean
   followerConnected: boolean
-  // Robot configuration
-  leaderRobotType: string
-  followerRobotType: string
-  leaderRobotId: string
-  followerRobotId: string
 }
 
 export interface CameraConfig {
@@ -91,10 +86,6 @@ export const useLeRobotStore = create<LeRobotState>((set) => ({
     followerPort: '/dev/ttyUSB1',
     leaderConnected: false,
     followerConnected: false,
-    leaderRobotType: '',
-    followerRobotType: '',
-    leaderRobotId: '',
-    followerRobotId: '',
   },
   setArmConfig: (config) => set((state) => ({
     armConfig: { ...state.armConfig, ...config }
@@ -149,9 +140,9 @@ export const useLeRobotStore = create<LeRobotState>((set) => ({
   })),
 
   // Hugging Face Credentials
-  hfUser: '',
+  hfUser: import.meta.env.VITE_HF_USER || '',
   setHfUser: (user) => set({ hfUser: user }),
-  hfToken: '',
+  hfToken: import.meta.env.VITE_HUGGINGFACE_TOKEN || '',
   setHfToken: (token) => set({ hfToken: token }),
 }))
 

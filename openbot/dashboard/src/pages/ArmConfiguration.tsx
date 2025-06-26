@@ -1,22 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLeRobotStore } from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 import {
   CogIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ExclamationTriangleIcon,
-  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import { CameraConfig } from '../store/lerobotStore'
-
-const BACKEND_URL = 'http://localhost:8000'
 
 interface UsbPort {
   path: string
   name: string
-  manufacturer?: string
-  product?: string
+  connected: boolean
+  lastSeen: Date
 }
 
 export default function ArmConfiguration() {
@@ -75,177 +69,38 @@ export default function ArmConfiguration() {
     };
   }, []);
 
-  // Load configuration from backend on mount
-  useEffect(() => {
-    const loadConfiguration = async () => {
-      try {
-        const response = await fetch(`${BACKEND_URL}/arm-config`)
-        if (response.ok) {
-          const data = await response.json()
-          if (data.success && data.config) {
-            setArmConfig({
-              leaderPort: data.config.leader.port || '',
-              followerPort: data.config.follower.port || '',
-              leaderConnected: data.config.leader.connected || false,
-              followerConnected: data.config.follower.connected || false,
-              leaderRobotType: data.config.leader.robot_type || '',
-              followerRobotType: data.config.follower.robot_type || '',
-              leaderRobotId: data.config.leader.robot_id || '',
-              followerRobotId: data.config.follower.robot_id || '',
-            })
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load configuration:', error)
-      }
-    }
-
-    loadConfiguration()
-  }, [])
-
-  const handlePortChange = async (armType: 'leader' | 'follower', port: string) => {
-    try {
-      const endpoint = armType === 'leader' ? '/arm-config/leader' : '/arm-config/follower'
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ port }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setArmConfig({
-            [`${armType}Port`]: port,
-          })
-          toast.success(`${armType.charAt(0).toUpperCase() + armType.slice(1)} arm port updated`)
-        } else {
-          toast.error(data.error || 'Failed to update port')
-        }
-      } else {
-        toast.error('Failed to update port')
-      }
-    } catch (error) {
-      console.error('Error updating port:', error)
-      toast.error('Failed to update port')
-    }
-  }
-
-  const handleRobotTypeChange = async (armType: 'leader' | 'follower', robotType: string) => {
-    try {
-      const endpoint = armType === 'leader' ? '/arm-config/leader' : '/arm-config/follower'
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ robot_type: robotType }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setArmConfig({
-            [`${armType}RobotType`]: robotType,
-          })
-          toast.success(`${armType.charAt(0).toUpperCase() + armType.slice(1)} arm robot type updated`)
-        } else {
-          toast.error(data.error || 'Failed to update robot type')
-        }
-      } else {
-        toast.error('Failed to update robot type')
-      }
-    } catch (error) {
-      console.error('Error updating robot type:', error)
-      toast.error('Failed to update robot type')
-    }
-  }
-
-  const handleRobotIdChange = async (armType: 'leader' | 'follower', robotId: string) => {
-    try {
-      const endpoint = armType === 'leader' ? '/arm-config/leader' : '/arm-config/follower'
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ robot_id: robotId }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setArmConfig({
-            [`${armType}RobotId`]: robotId,
-          })
-          toast.success(`${armType.charAt(0).toUpperCase() + armType.slice(1)} arm robot ID updated`)
-        } else {
-          toast.error(data.error || 'Failed to update robot ID')
-        }
-      } else {
-        toast.error('Failed to update robot ID')
-      }
-    } catch (error) {
-      console.error('Error updating robot ID:', error)
-      toast.error('Failed to update robot ID')
-    }
-  }
-
+  // Scan for USB ports
   const scanUsbPorts = async () => {
     setIsScanning(true)
     try {
-      const response = await fetch(`${BACKEND_URL}/arm-config/ports`)
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setUsbPorts(data.ports)
-          toast.success(`Found ${data.ports.length} USB ports`)
-        } else {
-          toast.error('Failed to scan ports')
-        }
-      } else {
-        toast.error('Failed to scan ports')
+      // Fetch real USB devices from backend
+      const response = await fetch('http://localhost:8000/detect-ports')
+      if (!response.ok) {
+        throw new Error('Failed to fetch USB ports')
       }
+      const data = await response.json()
+      // data.ports is an array of port paths
+      const realPorts: UsbPort[] = (data.ports || []).map((path: string) => ({
+        path,
+        name: `USB Device (${path})`,
+        connected: true,
+        lastSeen: new Date()
+      }))
+      setUsbPorts(realPorts)
     } catch (error) {
-      console.error('Error scanning ports:', error)
-      toast.error('Failed to scan ports')
+      console.error('Error scanning USB ports:', error)
+      toast.error('Failed to scan USB ports')
+      setUsbPorts([])
     } finally {
       setIsScanning(false)
     }
   }
 
-  const testConnection = async (armType: 'leader' | 'follower') => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/arm-config/test-connection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ arm_type: armType }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setArmConfig({
-            [`${armType}Connected`]: true,
-          })
-          toast.success(data.message)
-        } else {
-          setArmConfig({
-            [`${armType}Connected`]: false,
-          })
-          toast.error(data.error)
-        }
-      } else {
-        toast.error('Failed to test connection')
-      }
-    } catch (error) {
-      console.error('Error testing connection:', error)
-      toast.error('Failed to test connection')
-    }
+  const handlePortChange = (armType: 'leader' | 'follower', port: string) => {
+    setArmConfig({
+      [`${armType}Port`]: port
+    })
+    toast.success(`${armType.charAt(0).toUpperCase() + armType.slice(1)} arm port set to ${port}`)
   }
 
   const handleToggleCamera = (id: string) => {
@@ -559,37 +414,6 @@ export default function ArmConfiguration() {
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Robot Type
-                    </label>
-                    <select
-                      value={armConfig.leaderRobotType}
-                      onChange={(e) => handleRobotTypeChange('leader', e.target.value)}
-                      className="input-field"
-                    >
-                      <option value="">Select Robot Type</option>
-                      <option value="so100_leader">SO-100 - 5-DOF robotic arm (Leader)</option>
-                      <option value="giraffe_leader">Giraffe v1.1 - 5-DOF robotic arm (Leader)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Robot ID
-                    </label>
-                    <input
-                      type="text"
-                      value={armConfig.leaderRobotId}
-                      onChange={(e) => handleRobotIdChange('leader', e.target.value)}
-                      placeholder="e.g., my_awesome_leader_arm"
-                      className="input-field"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Give your leader arm a unique identifier
-                    </p>
-                  </div>
-
                   <div className="text-sm text-gray-600">
                     <p>Current port: <span className="font-medium">{armConfig.leaderPort || 'Not selected'}</span></p>
                   </div>
@@ -625,37 +449,6 @@ export default function ArmConfiguration() {
                         </option>
                       ))}
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Robot Type
-                    </label>
-                    <select
-                      value={armConfig.followerRobotType}
-                      onChange={(e) => handleRobotTypeChange('follower', e.target.value)}
-                      className="input-field"
-                    >
-                      <option value="">Select Robot Type</option>
-                      <option value="so100_follower">SO-100 - 5-DOF robotic arm (Follower)</option>
-                      <option value="giraffe_follower">Giraffe v1.1 - 5-DOF robotic arm (Follower)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Robot ID
-                    </label>
-                    <input
-                      type="text"
-                      value={armConfig.followerRobotId}
-                      onChange={(e) => handleRobotIdChange('follower', e.target.value)}
-                      placeholder="e.g., my_awesome_follower_arm"
-                      className="input-field"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Give your follower arm a unique identifier
-                    </p>
                   </div>
 
                   <div className="text-sm text-gray-600">

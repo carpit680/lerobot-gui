@@ -172,7 +172,7 @@ describe('ArmConfiguration Page', () => {
       fireEvent.click(scanButton);
 
       await waitFor(() => {
-        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/arm-config/ports');
+        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/detect-ports');
       });
     });
 
@@ -300,7 +300,7 @@ describe('ArmConfiguration Page', () => {
       fireEvent.click(scanButton);
       
       await waitFor(() => {
-        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/arm-config/ports');
+        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/detect-ports');
       });
     });
 

@@ -7,7 +7,6 @@ import asyncio
 import logging
 from backend import teleoperation_service
 from backend.motor_setup_service import MotorSetupService
-from backend.arm_configuration_service import arm_configuration_service
 import cv2
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import Response
@@ -63,14 +62,6 @@ class MotorSetupRequest(BaseModel):
 class MotorSetupInputRequest(BaseModel):
     session_id: str
     input_data: str
-
-class ArmConfigUpdateRequest(BaseModel):
-    port: Optional[str] = None
-    robot_type: Optional[str] = None
-    robot_id: Optional[str] = None
-
-class ArmConfigTestRequest(BaseModel):
-    arm_type: str  # 'leader' or 'follower'
 
 @app.get("/")
 async def root():
@@ -669,164 +660,21 @@ async def stop_motor_setup(session_id: str):
 
 @app.get("/env/huggingface")
 async def get_huggingface_env():
-    """Get Hugging Face environment variables"""
-    return {
-        "hf_user": os.getenv("HF_USER", ""),
-        "hf_token": os.getenv("HUGGINGFACE_TOKEN", "")
-    }
-
-# Arm Configuration Endpoints
-@app.get("/arm-config")
-async def get_arm_config():
-    """Get current arm configuration"""
+    """
+    Get Hugging Face environment variables from the system
+    """
     try:
-        config = arm_configuration_service.get_config()
-        if config:
-            return {
-                "success": True,
-                "config": config.model_dump()
-            }
-        else:
-            return {
-                "success": False,
-                "error": "No configuration found"
-            }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get configuration: {str(e)}")
-
-@app.get("/arm-config/leader")
-async def get_leader_config():
-    """Get leader arm configuration"""
-    try:
-        config = arm_configuration_service.get_leader_config()
-        if config:
-            return {
-                "success": True,
-                "config": config.model_dump()
-            }
-        else:
-            return {
-                "success": False,
-                "error": "No leader configuration found"
-            }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get leader configuration: {str(e)}")
-
-@app.get("/arm-config/follower")
-async def get_follower_config():
-    """Get follower arm configuration"""
-    try:
-        config = arm_configuration_service.get_follower_config()
-        if config:
-            return {
-                "success": True,
-                "config": config.model_dump()
-            }
-        else:
-            return {
-                "success": False,
-                "error": "No follower configuration found"
-            }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get follower configuration: {str(e)}")
-
-@app.put("/arm-config/leader")
-async def update_leader_config(request: ArmConfigUpdateRequest):
-    """Update leader arm configuration"""
-    try:
-        success = arm_configuration_service.update_leader_config(
-            port=request.port,
-            robot_type=request.robot_type,
-            robot_id=request.robot_id
-        )
+        hf_user = os.environ.get('HF_USER', '')
+        hf_token = os.environ.get('HUGGINGFACE_TOKEN', '')
         
-        if success:
-            config = arm_configuration_service.get_leader_config()
-            return {
-                "success": True,
-                "message": "Leader configuration updated successfully",
-                "config": config.model_dump() if config else None
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Failed to update leader configuration"
-            }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update leader configuration: {str(e)}")
-
-@app.put("/arm-config/follower")
-async def update_follower_config(request: ArmConfigUpdateRequest):
-    """Update follower arm configuration"""
-    try:
-        success = arm_configuration_service.update_follower_config(
-            port=request.port,
-            robot_type=request.robot_type,
-            robot_id=request.robot_id
-        )
-        
-        if success:
-            config = arm_configuration_service.get_follower_config()
-            return {
-                "success": True,
-                "message": "Follower configuration updated successfully",
-                "config": config.model_dump() if config else None
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Failed to update follower configuration"
-            }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update follower configuration: {str(e)}")
-
-@app.post("/arm-config/test-connection")
-async def test_arm_connection(request: ArmConfigTestRequest):
-    """Test connection to a specific arm"""
-    try:
-        result = await arm_configuration_service.test_connection(request.arm_type)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to test connection: {str(e)}")
-
-@app.get("/arm-config/validate")
-async def validate_arm_config():
-    """Validate current arm configuration"""
-    try:
-        result = arm_configuration_service.validate_config()
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to validate configuration: {str(e)}")
-
-@app.delete("/arm-config/reset")
-async def reset_arm_config():
-    """Reset arm configuration to defaults"""
-    try:
-        success = arm_configuration_service.reset_config()
-        if success:
-            return {
-                "success": True,
-                "message": "Configuration reset successfully"
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Failed to reset configuration"
-            }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to reset configuration: {str(e)}")
-
-@app.get("/arm-config/ports")
-async def get_arm_config_ports():
-    """Get available USB ports for arm configuration"""
-    try:
-        ports = await arm_configuration_service.list_ports()
         return {
-            "success": True,
-            "ports": ports
+            "hf_user": hf_user,
+            "hf_token": hf_token,
+            "has_user": bool(hf_user),
+            "has_token": bool(hf_token)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list ports: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get environment variables: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

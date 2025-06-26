@@ -6,8 +6,6 @@ A comprehensive web-based dashboard for the Hugging Face LeRobot framework, prov
 
 ### 🤖 Arm Configuration
 - Configure leader and follower arm ports
-- Set robot types (SO-100, Giraffe v1.1) for both arms
-- Configure unique robot IDs for both arms
 - Real-time connection status monitoring
 - Port selection with common defaults
 - Connection testing and validation
@@ -19,14 +17,12 @@ A comprehensive web-based dashboard for the Hugging Face LeRobot framework, prov
 
 ### 🔧 Calibration
 - Step-by-step calibration process for both arms
-- Uses robot configuration from Arm Configuration page
 - Real-time progress tracking
 - Comprehensive calibration validation
 - Troubleshooting guidance
 
 ### 🎮 Teleoperation
 - Manual control of robot arms
-- Uses robot configuration from Arm Configuration page
 - Multiple control modes (joint and cartesian)
 - Real-time camera feeds
 - Keyboard controls for precise movement
@@ -135,22 +131,17 @@ src/
   - Credentials are automatically loaded from system environment variables if available
   - Manually enter your Hugging Face username and access token if needed
   - These credentials are used for Hugging Face API access across the application
-- **Robot Configuration**:
-  - Select appropriate ports for leader and follower arms
-  - Choose robot types (SO-100 or Giraffe v1.1) for both arms
-  - Set unique robot IDs for both arms
-  - Test connections
-  - Verify both arms are connected before proceeding
+- Select appropriate ports for leader and follower arms
+- Test connections
+- Verify both arms are connected before proceeding
 
 ### 2. Calibration
-- Ensure both arms are configured in Arm Configuration
-- Select which arm to calibrate (leader or follower)
+- Ensure both arms are connected
 - Follow the step-by-step calibration process
 - Monitor progress and address any issues
 - Complete all calibration steps
 
 ### 3. Teleoperation
-- Ensure both arms are configured in Arm Configuration
 - Select camera feed for visual feedback
 - Choose control mode (joint or cartesian)
 - Use on-screen controls or keyboard for movement
