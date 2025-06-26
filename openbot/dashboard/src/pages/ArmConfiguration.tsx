@@ -36,6 +36,13 @@ export default function ArmConfiguration() {
     setCameraList(cameras)
   }, [cameras])
 
+  // Cleanup: Stop all camera streams on unmount
+  useEffect(() => {
+    return () => {
+      stopAllCameraStreams();
+    };
+  }, []);
+
   // Scan for USB ports
   const scanUsbPorts = async () => {
     setIsScanning(true)

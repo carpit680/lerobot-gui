@@ -246,6 +246,8 @@ def mjpeg_stream_generator(index):
             # Small delay to control frame rate
             time.sleep(0.033)  # ~30 FPS
             
+    except GeneratorExit:
+        print(f"Client disconnected from camera {index} stream")
     except Exception as e:
         print(f"Error in MJPEG stream for camera {index}: {e}")
     finally:

@@ -209,6 +209,22 @@ export default function Teleoperation() {
     }
   }
 
+  // Stop all camera streams on mount to prevent camera lock
+  useEffect(() => {
+    const stopAllCameraStreams = async () => {
+      const promises = cameras.map(async (camera) => {
+        const cameraIndex = camera.id.replace('camera', '')
+        try {
+          await fetch(`http://localhost:8000/camera/${cameraIndex}/stop`, { method: 'DELETE' })
+        } catch (error) {
+          // Ignore errors
+        }
+      })
+      await Promise.all(promises)
+    }
+    stopAllCameraStreams()
+  }, [cameras])
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
