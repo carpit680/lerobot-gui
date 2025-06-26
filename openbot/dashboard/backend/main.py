@@ -5,8 +5,9 @@ from typing import Optional, Dict, Any
 import json
 import asyncio
 import logging
-from calibration_service import calibration_service
-from teleoperation_service import teleoperation_service
+# from backend import calibration_service
+from backend import teleoperation_service
+from backend.motor_setup_service import MotorSetupService
 import cv2
 from fastapi.responses import StreamingResponse, JSONResponse
 import threading
@@ -15,7 +16,8 @@ import time
 import subprocess
 import sys
 import os
-from motor_setup_service import MotorSetupService
+
+from backend.calibration_service import calibration_service as calibration_service_instance
 
 motor_setup_service = MotorSetupService()
 
@@ -77,7 +79,7 @@ async def start_calibration(request: CalibrationRequest):
     Start a calibration process and return a session ID
     """
     try:
-        session_id = await calibration_service.start_calibration(
+        session_id = await calibration_service_instance.start_calibration(
             arm_type=request.arm_type,
             robot_type=request.robot_type,
             port=request.port,
@@ -99,7 +101,7 @@ async def send_input(request: InputRequest):
     Send input to an active calibration process
     """
     try:
-        success = await calibration_service.send_input(
+        success = await calibration_service_instance.send_input(
             session_id=request.session_id,
             input_data=request.input_data
         )
@@ -118,8 +120,8 @@ async def get_calibration_status(session_id: str):
     Get the status of a calibration process
     """
     try:
-        is_running = await calibration_service.is_running(session_id)
-        is_waiting_for_input = await calibration_service.is_waiting_for_input(session_id)
+        is_running = await calibration_service_instance.is_running(session_id)
+        is_waiting_for_input = await calibration_service_instance.is_waiting_for_input(session_id)
         
         return {
             "session_id": session_id,
@@ -137,7 +139,7 @@ async def stop_calibration(session_id: str):
     Stop a calibration process
     """
     try:
-        success = await calibration_service.stop_calibration(session_id)
+        success = await calibration_service_instance.stop_calibration(session_id)
         
         return {
             "success": success,
@@ -153,7 +155,7 @@ async def check_calibration_files(robot_id: str, arm_type: str = "follower"):
     Check if calibration files exist for a given robot ID and arm type
     """
     try:
-        result = await calibration_service.check_calibration_files(robot_id, arm_type)
+        result = await calibration_service_instance.check_calibration_files(robot_id, arm_type)
         return result
         
     except Exception as e:
@@ -165,7 +167,7 @@ async def list_ports():
     List available USB ports
     """
     try:
-        result = await calibration_service.list_ports()
+        result = await calibration_service_instance.list_ports()
         return result
         
     except Exception as e:
@@ -177,7 +179,7 @@ async def detect_ports():
     Detect and return available USB ports (on-demand detection).
     """
     try:
-        result = await calibration_service.list_ports()
+        result = await calibration_service_instance.list_ports()
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to detect ports: {str(e)}")
@@ -293,7 +295,7 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
         
         while True:
             # Check if process is still running
-            is_running = await calibration_service.is_running(session_id)
+            is_running = await calibration_service_instance.is_running(session_id)
             
             if not is_running:
                 # Process has finished
@@ -308,7 +310,7 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
                 break
             
             # Get all available output messages at once
-            outputs = await calibration_service.get_all_output(session_id)
+            outputs = await calibration_service_instance.get_all_output(session_id)
             if outputs:
                 print(f"Retrieved {len(outputs)} outputs for {session_id}")
                 for output in outputs:
@@ -327,7 +329,7 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
                     # Check if this output indicates completion
                     if "Calibration completed successfully" in output or "Calibration saved to" in output:
                         # Double-check if process is really finished
-                        is_running = await calibration_service.is_running(session_id)
+                        is_running = await calibration_service_instance.is_running(session_id)
                         if not is_running:
                             print(f"Process confirmed finished for {session_id} after completion output")
                             try:
