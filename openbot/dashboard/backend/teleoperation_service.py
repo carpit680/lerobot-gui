@@ -2,7 +2,6 @@ import subprocess
 import threading
 import queue
 from datetime import datetime
-from pathlib import Path
 import logging
 import os
 import pty
@@ -10,6 +9,7 @@ import select
 import time
 import json
 import re
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class TeleoperationService:
 
             # Build the teleoperation command
             command = [
-                "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-m", "lerobot.teleoperate",
+                sys.executable, "-m", "lerobot.teleoperate",
                 f"--robot.type={follower_type}",
                 f"--robot.port={follower_port}",
                 f"--robot.id={follower_id}",

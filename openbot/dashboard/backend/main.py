@@ -1,21 +1,18 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional
 import json
 import asyncio
 import logging
-# from backend import calibration_service
 from backend import teleoperation_service
 from backend.motor_setup_service import MotorSetupService
 import cv2
 from fastapi.responses import StreamingResponse, JSONResponse
-import threading
 from fastapi import Response
 import time
 import subprocess
 import sys
-import os
 
 from backend.calibration_service import calibration_service as calibration_service_instance
 
@@ -365,7 +362,7 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
 @app.post("/teleop/start")
 async def start_teleoperation(request: TeleoperationRequest):
     try:
-        session_id = await teleoperation_service.start_teleoperation(
+        session_id = await teleoperation_service.teleoperation_service.start_teleoperation(
             leader_type=request.leader_type,
             leader_port=request.leader_port,
             leader_id=request.leader_id,
@@ -385,7 +382,7 @@ async def start_teleoperation(request: TeleoperationRequest):
 @app.get("/teleop/status/{session_id}")
 async def get_teleoperation_status(session_id: str):
     try:
-        is_running = await teleoperation_service.is_running(session_id)
+        is_running = await teleoperation_service.teleoperation_service.is_running(session_id)
         return {
             "session_id": session_id,
             "is_running": is_running,
@@ -397,7 +394,7 @@ async def get_teleoperation_status(session_id: str):
 @app.delete("/teleop/stop/{session_id}")
 async def stop_teleoperation(session_id: str):
     try:
-        success = await teleoperation_service.stop_teleoperation(session_id)
+        success = await teleoperation_service.teleoperation_service.stop_teleoperation(session_id)
         return {
             "success": success,
             "message": "Teleoperation stopped successfully" if success else "Failed to stop teleoperation"
@@ -418,7 +415,7 @@ async def websocket_teleoperation(websocket: WebSocket, session_id: str):
         await websocket.send_text(json.dumps(initial_message))
         message_count += 1
         while True:
-            is_running = await teleoperation_service.is_running(session_id)
+            is_running = await teleoperation_service.teleoperation_service.is_running(session_id)
             if not is_running:
                 try:
                     await websocket.send_text(json.dumps({
@@ -430,7 +427,7 @@ async def websocket_teleoperation(websocket: WebSocket, session_id: str):
                 break
             
             # Get regular outputs (non-table)
-            outputs = await teleoperation_service.get_all_output(session_id)
+            outputs = await teleoperation_service.teleoperation_service.get_all_output(session_id)
             if outputs:
                 for output in outputs:
                     message_count += 1
@@ -443,7 +440,7 @@ async def websocket_teleoperation(websocket: WebSocket, session_id: str):
                         break
             
             # Get latest table data
-            latest_table = await teleoperation_service.get_latest_table(session_id)
+            latest_table = await teleoperation_service.teleoperation_service.get_latest_table(session_id)
             if latest_table and latest_table != last_table_sent:
                 try:
                     await websocket.send_text(json.dumps({
@@ -512,7 +509,7 @@ async def run_motor_setup(request: Request):
         return JSONResponse(status_code=400, content={"error": "Missing type or port"})
     try:
         cmd = [
-            "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-u", "-m", "lerobot.setup_motors",
+            sys.executable, "-u", "-m", "lerobot.setup_motors",
             f"--robot.type={robot_type}",
             f"--robot.port={robot_port}"
         ]

@@ -109,4 +109,37 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Once the server is running, visit:
 - Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc` 
+- ReDoc: `http://localhost:8000/redoc`
+
+## Poetry-based Dependency Management
+
+This backend now uses [Poetry](https://python-poetry.org/) for dependency and environment management. All dependencies are tracked in the root `pyproject.toml` and `poetry.lock` files.
+
+### Common Commands
+
+- **Install all dependencies:**
+  ```bash
+  poetry install
+  ```
+- **Add a dependency:**
+  ```bash
+  poetry add <package>
+  ```
+- **Add a dev (test) dependency:**
+  ```bash
+  poetry add --group dev <package>
+  ```
+- **Remove a dependency:**
+  ```bash
+  poetry remove <package>
+  ```
+- **Run tests:**
+  ```bash
+  poetry run pytest backend/tests
+  ```
+- **Spawn a shell in the Poetry environment:**
+  ```bash
+  poetry shell
+  ```
+
+> **Note:** The old `requirements.txt` is now legacy. Use `pyproject.toml` and `poetry.lock` as the source of truth for backend dependencies. 

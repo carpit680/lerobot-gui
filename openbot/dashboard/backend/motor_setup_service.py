@@ -32,7 +32,7 @@ class MotorSetupService:
                 "output": []
             }
             command = [
-                "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-u", "-m", "lerobot.setup_motors",
+                sys.executable, "-u", "-m", "lerobot.setup_motors",
                 f"--robot.type={robot_type}",
                 f"--robot.port={port}"
             ]

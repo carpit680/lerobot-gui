@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "openbot-backend"
+version = "0.1.0"
+description = "Backend for OpenBot Dashboard"
+authors = ["OpenBot Team"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "0.104.1"
+uvicorn = {extras = ["standard"], version = "0.24.0"}
+pydantic = "2.5.0"
+lerobot = { git = "https://github.com/openbot-co-in/lerobot-openbot.git", branch = "openbot-gui", extras = ["feetech"], develop = true }
+python-multipart = "^0.0.20"
+httpx = "0.27.0"
+starlette = "0.27.0"
+opencv-python = "4.10.0.84"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.4.1"
+pytest-asyncio = "1.0.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

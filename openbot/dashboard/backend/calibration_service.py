@@ -1,5 +1,3 @@
-import asyncio
-import json
 import os
 import re
 from pathlib import Path
@@ -9,8 +7,7 @@ import threading
 import queue
 import subprocess
 from datetime import datetime
-import pty
-import time
+import sys
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -77,14 +74,14 @@ class CalibrationService:
             # Build the calibration command
             if arm_type == 'leader':
                 command = [
-                    "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-m", "lerobot.calibrate",
+                    sys.executable, "-m", "lerobot.calibrate",
                     f"--teleop.type={robot_type.lower().replace('Follower', '_follower').replace('Leader', '_leader')}",
                     f"--teleop.port={port}",
                     f"--teleop.id={robot_id}"
                 ]
             else:
                 command = [
-                    "/home/rightbot/miniconda3/envs/openbot-gui/bin/python", "-m", "lerobot.calibrate",
+                    sys.executable, "-m", "lerobot.calibrate",
                     f"--robot.type={robot_type.lower().replace('Follower', '_follower').replace('Leader', '_leader')}",
                     f"--robot.port={port}",
                     f"--robot.id={robot_id}"
