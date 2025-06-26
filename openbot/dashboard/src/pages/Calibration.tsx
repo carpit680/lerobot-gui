@@ -39,15 +39,13 @@ interface RobotType {
 const BACKEND_URL = 'http://localhost:8000'
 
 export default function Calibration() {
-  const { armConfig } = useLeRobotStore()
+  const { armConfig, setArmConfig } = useLeRobotStore()
   const [isCalibrating, setIsCalibrating] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [selectedArm, setSelectedArm] = useState<'leader' | 'follower'>('leader')
-  const [selectedRobot, setSelectedRobot] = useState<string>('so100')
   const [calibrationOutput, setCalibrationOutput] = useState<string>('')
   const [isRunning, setIsRunning] = useState(false)
   const [waitingForUser, setWaitingForUser] = useState(false)
-  const [robotId, setRobotId] = useState<string>('')
   const [sessionId, setSessionId] = useState<string>('')
   const [websocket, setWebsocket] = useState<WebSocket | null>(null)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
@@ -55,8 +53,16 @@ export default function Calibration() {
   const [calibrationSteps, setCalibrationSteps] = useState<CalibrationStep[]>([])
   const [isCancelled, setIsCancelled] = useState(false)
   const monitoringIntervalRef = useRef<number | null>(null)
-  
-  // LeRobot supported robots and their calibration steps
+
+  // Get current port and robot configuration based on selected arm
+  const currentPort = selectedArm === 'leader' ? armConfig.leaderPort : armConfig.followerPort
+  const currentRobotType = selectedArm === 'leader' ? armConfig.leaderRobotType : armConfig.followerRobotType
+  const currentRobotId = selectedArm === 'leader' ? armConfig.leaderRobotId : armConfig.followerRobotId
+
+  // Extract base robot type from full value (e.g., 'so100_leader' -> 'so100')
+  const baseRobotType = currentRobotType ? currentRobotType.split('_')[0] : ''
+
+  // Robot types configuration
   const robotTypes: RobotType[] = [
     {
       id: 'so100',
@@ -65,73 +71,61 @@ export default function Calibration() {
       calibrationSteps: [
         {
           id: 'connection',
-          name: 'Connect to Robot',
-          description: 'Establish connection to the robot arm',
-          status: 'pending'
+          name: 'Connection',
+          description: 'Establish connection to robot arm',
+          status: 'pending' as const
         },
         {
-          id: 'step1',
-          name: 'Step 1: Move to Middle Position',
-          description: 'Move the test joint to the middle of its range',
-          status: 'pending'
+          id: 'middle_position',
+          name: 'Move to Middle Position',
+          description: 'Move robot joints to middle of their ranges',
+          status: 'pending' as const
         },
         {
-          id: 'step2',
-          name: 'Step 2: Move All Joints',
-          description: 'Move all joints through their entire range of motion',
-          status: 'pending'
-        },
-        {
-          id: 'completion',
-          name: 'Calibration Complete',
-          description: 'Calibration files saved and robot disconnected',
-          status: 'pending'
+          id: 'all_joints',
+          name: 'Move All Joints',
+          description: 'Move all joints through their entire ranges',
+          status: 'pending' as const
         }
       ]
     },
     {
       id: 'giraffe',
       name: 'Giraffe v1.1',
-      description: '6-DOF robotic arm',
+      description: '5-DOF robotic arm',
       calibrationSteps: [
         {
           id: 'connection',
-          name: 'Connect to Robot',
-          description: 'Establish connection to the robot arm',
-          status: 'pending'
+          name: 'Connection',
+          description: 'Establish connection to robot arm',
+          status: 'pending' as const
         },
         {
-          id: 'step1',
-          name: 'Step 1: Move to Middle Position',
-          description: 'Move the test joint to the middle of its range',
-          status: 'pending'
+          id: 'middle_position',
+          name: 'Move to Middle Position',
+          description: 'Move robot joints to middle of their ranges',
+          status: 'pending' as const
         },
         {
-          id: 'step2',
-          name: 'Step 2: Move All Joints',
-          description: 'Move all joints through their entire range of motion',
-          status: 'pending'
-        },
-        {
-          id: 'completion',
-          name: 'Calibration Complete',
-          description: 'Calibration files saved and robot disconnected',
-          status: 'pending'
+          id: 'all_joints',
+          name: 'Move All Joints',
+          description: 'Move all joints through their entire ranges',
+          status: 'pending' as const
         }
       ]
     }
   ]
 
-  const selectedRobotType = robotTypes.find(robot => robot.id === selectedRobot)
-  const currentPort = selectedArm === 'leader' ? armConfig.leaderPort : armConfig.followerPort
-  const robotType = selectedArm === 'leader' ? `${selectedRobot}_leader` : `${selectedRobot}_follower`
+  // Get robot type configuration using base robot type
+  const robotType = robotTypes.find(rt => rt.id === baseRobotType)
+  const robotTypeString = currentRobotType || ''
 
   // Initialize calibration steps when robot type changes
   useEffect(() => {
-    if (selectedRobotType) {
-      setCalibrationSteps([...selectedRobotType.calibrationSteps])
+    if (robotType) {
+      setCalibrationSteps([...robotType.calibrationSteps])
     }
-  }, [selectedRobot])
+  }, [robotType])
 
   // Check backend connection on component mount
   useEffect(() => {
@@ -153,6 +147,35 @@ export default function Calibration() {
   useEffect(() => {
     console.log('Calibration state changed - isCalibrating:', isCalibrating, 'waitingForUser:', waitingForUser)
   }, [isCalibrating, waitingForUser])
+
+  // Load configuration from backend on mount
+  useEffect(() => {
+    const loadConfiguration = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/arm-config`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.config) {
+            // Update the store with backend configuration
+            setArmConfig({
+              leaderPort: data.config.leader.port || '',
+              followerPort: data.config.follower.port || '',
+              leaderConnected: data.config.leader.connected || false,
+              followerConnected: data.config.follower.connected || false,
+              leaderRobotType: data.config.leader.robot_type || '',
+              followerRobotType: data.config.follower.robot_type || '',
+              leaderRobotId: data.config.leader.robot_id || '',
+              followerRobotId: data.config.follower.robot_id || '',
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load configuration:', error)
+      }
+    }
+
+    loadConfiguration()
+  }, [])
 
   const checkBackendConnection = async () => {
     try {
@@ -178,12 +201,12 @@ export default function Calibration() {
       return
     }
 
-    if (!selectedRobotType) {
+    if (!robotType) {
       toast.error('Please select a robot type')
       return
     }
 
-    if (!robotId.trim()) {
+    if (!currentRobotId.trim()) {
       toast.error('Please provide a unique robot ID')
       return
     }
@@ -199,7 +222,7 @@ export default function Calibration() {
     setIsCancelled(false)
 
     // Reset all steps to pending
-    setCalibrationSteps(selectedRobotType.calibrationSteps.map(step => ({ ...step, status: 'pending' as const })))
+    setCalibrationSteps(robotType.calibrationSteps.map(step => ({ ...step, status: 'pending' as const })))
 
     try {
       // Start calibration via backend
@@ -210,9 +233,9 @@ export default function Calibration() {
         },
         body: JSON.stringify({
           arm_type: selectedArm,
-          robot_type: robotType,
+          robot_type: robotTypeString,
           port: currentPort,
-          robot_id: robotId
+          robot_id: currentRobotId
         })
       })
 
@@ -222,7 +245,7 @@ export default function Calibration() {
 
       const result = await response.json()
       setSessionId(result.session_id)
-      setCalibrationOutput(`Calibration started with session ID: ${result.session_id}\nCommand: python -m lerobot.calibrate --${selectedArm === 'leader' ? 'teleop' : 'robot'}.type=${robotType} --${selectedArm === 'leader' ? 'teleop' : 'robot'}.port=${currentPort} --${selectedArm === 'leader' ? 'teleop' : 'robot'}.id=${robotId}`)
+      setCalibrationOutput(`Calibration started with session ID: ${result.session_id}\nCommand: python -m lerobot.calibrate --${selectedArm === 'leader' ? 'teleop' : 'robot'}.type=${robotTypeString} --${selectedArm === 'leader' ? 'teleop' : 'robot'}.port=${currentPort} --${selectedArm === 'leader' ? 'teleop' : 'robot'}.id=${currentRobotId}`)
 
       // Start WebSocket connection for real-time output
       startWebSocketConnection(result.session_id)
@@ -299,69 +322,129 @@ export default function Calibration() {
         
         // Update step status based on output content
         if (calibrationSteps.length > 0) {
-          // Step 0: Connection - Look for connection establishment
-          if (cleanOutput.includes('Connected to robot') || 
-              cleanOutput.includes('Connection established') ||
-              cleanOutput.includes('Robot connected') ||
-              cleanOutput.includes('Starting calibration') ||
-              cleanOutput.includes('Calibration started for')) {
-            setCalibrationSteps(prev => prev.map((step, idx) => 
-              idx === 0 ? { ...step, status: 'completed' as const } : 
-              idx === 1 ? { ...step, status: 'in-progress' as const } : step
-            ))
-            setCurrentStep(1)
-          }
-          
-          // Step 1: Move to Middle Position - Look for "Move test" message
-          else if (cleanOutput.includes('Move test') && cleanOutput.includes('middle of its range')) {
-            setCalibrationSteps(prev => prev.map((step, idx) => 
-              idx === 0 ? { ...step, status: 'completed' as const } : 
-              idx === 1 ? { ...step, status: 'in-progress' as const } : step
-            ))
-            setCurrentStep(1)
-          }
-          
-          // Step 2: Move All Joints - Look for "Move all joints" message
-          else if (cleanOutput.includes('Move all joints') && cleanOutput.includes('entire ranges')) {
-            setCalibrationSteps(prev => prev.map((step, idx) => 
-              idx === 1 ? { ...step, status: 'completed' as const } : 
-              idx === 2 ? { ...step, status: 'in-progress' as const } : step
-            ))
-            setCurrentStep(2)
-          }
-          
-          // Completion - Look for calibration data saved or completion messages
-          else if (cleanOutput.includes('Calibration data collected') ||
-                   cleanOutput.includes('Calibration data saved') ||
-                   cleanOutput.includes('Calibration saved to') ||
-                   cleanOutput.includes('Calibration completed successfully') || 
-                   cleanOutput.includes('Process finished') ||
-                   cleanOutput.includes('Calibration completed!') ||
-                   cleanOutput.includes('exit code 0') ||
-                   cleanOutput.includes('calibration files saved')) {
-            // Check if this was a cancellation
-            if (cleanOutput.includes('Calibration cancelled by user')) {
-              // Don't mark steps as completed for cancellation
-              setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'failed' as const })))
-              setCurrentStep(0)
-            } else {
-              // Mark all steps as completed for successful completion
+          // Handle structured step transition messages from backend
+          if (cleanOutput.includes('[STEP_TRANSITION]')) {
+            const stepMessage = cleanOutput.replace('[STEP_TRANSITION]', '').trim()
+            console.log('Received step transition message:', stepMessage)
+            
+            if (stepMessage === 'Step 0: Connection Established') {
+              console.log('Updating step 0 to completed, step 1 to in-progress')
+              setCalibrationSteps(prev => prev.map((step, idx) => 
+                idx === 0 ? { ...step, status: 'completed' as const } : 
+                idx === 1 ? { ...step, status: 'in-progress' as const } : step
+              ))
+              setCurrentStep(1)
+            }
+            else if (stepMessage === 'Step 1: Move to Middle Position') {
+              console.log('Updating step 1 to completed, step 2 to in-progress')
+              setCalibrationSteps(prev => prev.map((step, idx) => 
+                idx === 0 ? { ...step, status: 'completed' as const } : 
+                idx === 1 ? { ...step, status: 'in-progress' as const } : step
+              ))
+              setCurrentStep(1)
+            }
+            else if (stepMessage === 'Step 2: Move All Joints') {
+              console.log('Updating step 2 to completed')
+              setCalibrationSteps(prev => prev.map((step, idx) => 
+                idx === 1 ? { ...step, status: 'completed' as const } : 
+                idx === 2 ? { ...step, status: 'in-progress' as const } : step
+              ))
+              setCurrentStep(2)
+            }
+            else if (stepMessage === 'All Steps: Completed') {
+              console.log('Marking all steps as completed')
               setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'completed' as const })))
               setCurrentStep(calibrationSteps.length - 1)
+              setWaitingForUser(false)
             }
-            // Reset waiting state when calibration completes
-            setWaitingForUser(false)
+            else if (stepMessage === 'All Steps: Cancelled') {
+              console.log('Marking all steps as failed (cancelled)')
+              setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'failed' as const })))
+              setCurrentStep(0)
+              setWaitingForUser(false)
+            }
+            else if (stepMessage === 'Current Step: Failed') {
+              console.log('Marking current step as failed')
+              setCalibrationSteps(prev => prev.map((step, idx) => 
+                idx === currentStep ? { ...step, status: 'failed' as const } : step
+              ))
+            }
           }
-          
-          // Handle errors
-          else if (cleanOutput.includes('Error') || 
-                   cleanOutput.includes('Failed') ||
-                   cleanOutput.includes('Exception') ||
-                   cleanOutput.includes('exit code 1')) {
-            // Mark current step as failed
+          // Handle waiting for input message
+          else if (cleanOutput.includes('[WAITING_FOR_INPUT]')) {
+            console.log('Received waiting for input message')
+            setWaitingForUser(true)
+            // Mark current step as waiting for user input
             setCalibrationSteps(prev => prev.map((step, idx) => 
-              idx === currentStep ? { ...step, status: 'failed' as const } : step
+              idx === currentStep ? { ...step, status: 'waiting-user' as const } : step
             ))
+          }
+          // Fallback to old string matching logic for backward compatibility
+          else {
+            // Step 0: Connection - Look for connection establishment
+            if (cleanOutput.includes('Connected to robot') || 
+                cleanOutput.includes('Connection established') ||
+                cleanOutput.includes('Robot connected') ||
+                cleanOutput.includes('Starting calibration') ||
+                cleanOutput.includes('Calibration started for')) {
+              setCalibrationSteps(prev => prev.map((step, idx) => 
+                idx === 0 ? { ...step, status: 'completed' as const } : 
+                idx === 1 ? { ...step, status: 'in-progress' as const } : step
+              ))
+              setCurrentStep(1)
+            }
+            
+            // Step 1: Move to Middle Position - Look for "Move test" message
+            else if (cleanOutput.includes('Move test') && cleanOutput.includes('middle of its range')) {
+              setCalibrationSteps(prev => prev.map((step, idx) => 
+                idx === 0 ? { ...step, status: 'completed' as const } : 
+                idx === 1 ? { ...step, status: 'in-progress' as const } : step
+              ))
+              setCurrentStep(1)
+            }
+            
+            // Step 2: Move All Joints - Look for "Move all joints" message
+            else if (cleanOutput.includes('Move all joints') && cleanOutput.includes('entire ranges')) {
+              setCalibrationSteps(prev => prev.map((step, idx) => 
+                idx === 1 ? { ...step, status: 'completed' as const } : 
+                idx === 2 ? { ...step, status: 'in-progress' as const } : step
+              ))
+              setCurrentStep(2)
+            }
+            
+            // Completion - Look for calibration data saved or completion messages
+            else if (cleanOutput.includes('Calibration data collected') ||
+                     cleanOutput.includes('Calibration data saved') ||
+                     cleanOutput.includes('Calibration saved to') ||
+                     cleanOutput.includes('Calibration completed successfully') || 
+                     cleanOutput.includes('Process finished') ||
+                     cleanOutput.includes('Calibration completed!') ||
+                     cleanOutput.includes('exit code 0') ||
+                     cleanOutput.includes('calibration files saved')) {
+              // Check if this was a cancellation
+              if (cleanOutput.includes('Calibration cancelled by user')) {
+                // Don't mark steps as completed for cancellation
+                setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'failed' as const })))
+                setCurrentStep(0)
+              } else {
+                // Mark all steps as completed for successful completion
+                setCalibrationSteps(prev => prev.map(step => ({ ...step, status: 'completed' as const })))
+                setCurrentStep(calibrationSteps.length - 1)
+              }
+              // Reset waiting state when calibration completes
+              setWaitingForUser(false)
+            }
+            
+            // Handle errors
+            else if (cleanOutput.includes('Error') || 
+                     cleanOutput.includes('Failed') ||
+                     cleanOutput.includes('Exception') ||
+                     cleanOutput.includes('exit code 1')) {
+              // Mark current step as failed
+              setCalibrationSteps(prev => prev.map((step, idx) => 
+                idx === currentStep ? { ...step, status: 'failed' as const } : step
+              ))
+            }
           }
         }
       } else if (data.type === 'status') {
@@ -571,7 +654,7 @@ export default function Calibration() {
 
   const checkCalibrationFiles = async (retryCount = 0) => {
     try {
-      const response = await fetch(`${BACKEND_URL}/check-calibration-files/${robotId}?arm_type=${selectedArm}`)
+      const response = await fetch(`${BACKEND_URL}/check-calibration-files/${currentRobotId}?arm_type=${selectedArm}`)
       if (response.ok) {
         const result = await response.json()
         console.log('Calibration files check result:', result)
@@ -688,16 +771,14 @@ export default function Calibration() {
         </div>
       </div>
 
-      {/* Configuration Section */}
+      {/* Arm Selection */}
       <div className="mb-8">
         <div className="card">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4 font-heading">Calibration Configuration</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Arm Selection */}
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Arm to Calibrate</h3>
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Arm
+                Arm Type
               </label>
               <select
                 value={selectedArm}
@@ -708,49 +789,43 @@ export default function Calibration() {
                 <option value="leader">Leader Arm</option>
                 <option value="follower">Follower Arm</option>
               </select>
-              <p className="text-sm text-gray-600 mt-1">
-                Port: {currentPort || 'Not configured'}
-              </p>
-            </div>
-
-            {/* Robot Type Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Robot Type
-              </label>
-              <select
-                value={selectedRobot}
-                onChange={(e) => setSelectedRobot(e.target.value)}
-                className="input-field"
-                disabled={isCalibrating}
-              >
-                {robotTypes.map(robot => (
-                  <option key={robot.id} value={robot.id}>
-                    {robot.name} - {robot.description}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-gray-600 mt-1">
-                Type: {robotType}
-              </p>
-            </div>
-
-            {/* Robot ID */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Robot ID
-              </label>
-              <input
-                type="text"
-                value={robotId}
-                onChange={(e) => setRobotId(e.target.value)}
-                placeholder="e.g., my_awesome_leader_arm"
-                className="input-field"
-                disabled={isCalibrating}
-              />
-              <p className="text-sm text-gray-600 mt-1">
-                Give your robot a unique name
-              </p>
+              
+              {/* Configuration Status */}
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900">
+                      {selectedArm === 'leader' ? 'Leader' : 'Follower'} Arm Configuration
+                    </h4>
+                    <div className="mt-1 space-y-1 text-sm text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <span>Port:</span>
+                        <span className={`font-mono ${currentPort ? 'text-green-600' : 'text-red-600'}`}>
+                          {currentPort || 'Not configured'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span>Type:</span>
+                        <span className={`font-mono ${currentRobotType ? 'text-green-600' : 'text-red-600'}`}>
+                          {currentRobotType || 'Not configured'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span>ID:</span>
+                        <span className={`font-mono ${currentRobotId ? 'text-green-600' : 'text-red-600'}`}>
+                          {currentRobotId || 'Not configured'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${currentPort && currentRobotType && currentRobotId ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className="text-sm font-medium">
+                      {currentPort && currentRobotType && currentRobotId ? 'Ready' : 'Incomplete'}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -766,6 +841,23 @@ export default function Calibration() {
                 <h3 className="text-lg font-semibold text-red-800 font-heading">Port Not Configured</h3>
                 <p className="text-red-700">
                   Please configure the {selectedArm} arm port in the Arm Configuration page before starting calibration.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Robot Configuration Check */}
+      {(!currentRobotType || !currentRobotId.trim()) && (
+        <div className="mb-8">
+          <div className="card border-red-200 bg-red-50">
+            <div className="flex items-center gap-3">
+              <ExclamationTriangleIcon className="h-6 w-6 text-red-500" />
+              <div>
+                <h3 className="text-lg font-semibold text-red-800 font-heading">Robot Configuration Incomplete</h3>
+                <p className="text-red-700">
+                  Please configure the {selectedArm} arm robot type and ID in the Arm Configuration page before starting calibration.
                 </p>
               </div>
             </div>
@@ -846,7 +938,7 @@ export default function Calibration() {
           <div className="mt-6 flex gap-4">
             <button
               onClick={startCalibration}
-              disabled={isCalibrating || !currentPort || !robotId.trim() || backendConnected === false}
+              disabled={isCalibrating || !currentPort || !currentRobotId.trim() || backendConnected === false}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isCalibrating ? (

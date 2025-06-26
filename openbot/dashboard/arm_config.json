@@ -1,0 +1,14 @@
+{
+  "leader": {
+    "port": "/dev/ttyUSB0",
+    "robot_type": "giraffe_leader",
+    "robot_id": "giraffe",
+    "connected": false
+  },
+  "follower": {
+    "port": "/dev/ttyACM0",
+    "robot_type": "giraffe_follower",
+    "robot_id": "giraffe",
+    "connected": false
+  }
+}

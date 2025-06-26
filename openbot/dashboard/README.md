@@ -6,18 +6,27 @@ A comprehensive web-based dashboard for the Hugging Face LeRobot framework, prov
 
 ### 🤖 Arm Configuration
 - Configure leader and follower arm ports
+- Set robot types (SO-100, Giraffe v1.1) for both arms
+- Configure unique robot IDs for both arms
 - Real-time connection status monitoring
 - Port selection with common defaults
 - Connection testing and validation
+- **Hugging Face Credentials Management**
+  - Set Hugging Face username and access token
+  - Automatic loading from system environment variables (`HF_USER` and `HUGGINGFACE_TOKEN`)
+  - Secure token storage in application state
+  - Visual indicators when credentials are loaded from environment
 
 ### 🔧 Calibration
 - Step-by-step calibration process for both arms
+- Uses robot configuration from Arm Configuration page
 - Real-time progress tracking
 - Comprehensive calibration validation
 - Troubleshooting guidance
 
 ### 🎮 Teleoperation
 - Manual control of robot arms
+- Uses robot configuration from Arm Configuration page
 - Multiple control modes (joint and cartesian)
 - Real-time camera feeds
 - Keyboard controls for precise movement
@@ -122,17 +131,26 @@ src/
 
 ### 1. Arm Configuration
 - Navigate to "Arm Configuration"
-- Select appropriate ports for leader and follower arms
-- Test connections
-- Verify both arms are connected before proceeding
+- **Hugging Face Credentials** (optional):
+  - Credentials are automatically loaded from system environment variables if available
+  - Manually enter your Hugging Face username and access token if needed
+  - These credentials are used for Hugging Face API access across the application
+- **Robot Configuration**:
+  - Select appropriate ports for leader and follower arms
+  - Choose robot types (SO-100 or Giraffe v1.1) for both arms
+  - Set unique robot IDs for both arms
+  - Test connections
+  - Verify both arms are connected before proceeding
 
 ### 2. Calibration
-- Ensure both arms are connected
+- Ensure both arms are configured in Arm Configuration
+- Select which arm to calibrate (leader or follower)
 - Follow the step-by-step calibration process
 - Monitor progress and address any issues
 - Complete all calibration steps
 
 ### 3. Teleoperation
+- Ensure both arms are configured in Arm Configuration
 - Select camera feed for visual feedback
 - Choose control mode (joint or cartesian)
 - Use on-screen controls or keyboard for movement
@@ -187,6 +205,19 @@ armConfig: {
   // ...
 }
 ```
+
+### Environment Variables
+The dashboard can automatically load Hugging Face credentials from system environment variables:
+
+```bash
+# Set in your shell profile (.bashrc, .zshrc, etc.)
+export HF_USER="your_huggingface_username"
+export HUGGINGFACE_TOKEN="your_huggingface_access_token"
+```
+
+These credentials will be automatically loaded when you visit the Arm Configuration page and can be manually overridden if needed.
+
+**Note:** The backend reads these environment variables and provides them to the frontend securely. The frontend stores them in application state for use across all pages.
 
 ## Development
 

@@ -6,6 +6,11 @@ export interface ArmConfig {
   followerPort: string
   leaderConnected: boolean
   followerConnected: boolean
+  // Robot configuration
+  leaderRobotType: string
+  followerRobotType: string
+  leaderRobotId: string
+  followerRobotId: string
 }
 
 export interface CameraConfig {
@@ -71,6 +76,12 @@ export interface LeRobotState {
     isTeleoperating: boolean
   }
   setSessionState: (state: Partial<LeRobotState['currentSession']>) => void
+
+  // Hugging Face Credentials
+  hfUser: string
+  setHfUser: (user: string) => void
+  hfToken: string
+  setHfToken: (token: string) => void
 }
 
 export const useLeRobotStore = create<LeRobotState>((set) => ({
@@ -80,6 +91,10 @@ export const useLeRobotStore = create<LeRobotState>((set) => ({
     followerPort: '/dev/ttyUSB1',
     leaderConnected: false,
     followerConnected: false,
+    leaderRobotType: '',
+    followerRobotType: '',
+    leaderRobotId: '',
+    followerRobotId: '',
   },
   setArmConfig: (config) => set((state) => ({
     armConfig: { ...state.armConfig, ...config }
@@ -132,6 +147,12 @@ export const useLeRobotStore = create<LeRobotState>((set) => ({
   setSessionState: (state) => set((currentState) => ({
     currentSession: { ...currentState.currentSession, ...state }
   })),
+
+  // Hugging Face Credentials
+  hfUser: '',
+  setHfUser: (user) => set({ hfUser: user }),
+  hfToken: '',
+  setHfToken: (token) => set({ hfToken: token }),
 }))
 
 interface LeRobotStoreProps {

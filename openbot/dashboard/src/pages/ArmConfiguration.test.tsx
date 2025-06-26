@@ -1,33 +1,370 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ArmConfiguration from './ArmConfiguration';
 import * as store from '../store/lerobotStore';
 
-jest.mock('../store/lerobotStore');
-global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ ports: ['/dev/ttyUSB0'], cameras: [] }) })) as jest.Mock;
+vi.mock('../store/lerobotStore');
+
+// Mock fetch globally
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
 
 describe('ArmConfiguration Page', () => {
+  const mockStore = {
+    armConfig: { 
+      leaderPort: '/dev/ttyUSB0', 
+      followerPort: '/dev/ttyUSB1',
+      leaderConnected: false,
+      followerConnected: false
+    },
+    setArmConfig: vi.fn(),
+    cameras: [],
+    setCameras: vi.fn(),
+    toggleCamera: vi.fn(),
+    hfUser: '',
+    setHfUser: vi.fn(),
+    hfToken: '',
+    setHfToken: vi.fn(),
+  };
+
   beforeEach(() => {
-    jest.clearAllMocks();
-    (store.useLeRobotStore as jest.Mock).mockReturnValue({
-      armConfig: { leaderPort: '/dev/ttyUSB0', followerPort: '/dev/ttyUSB1' },
-      setArmConfig: jest.fn(),
-      cameras: [],
-      setCameras: jest.fn(),
-      toggleCamera: jest.fn(),
+    vi.clearAllMocks();
+    (store.useLeRobotStore as any).mockReturnValue(mockStore);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ports: ['/dev/ttyUSB0', '/dev/ttyUSB1'], cameras: [] })
     });
   });
 
-  it('renders Arm Configuration page', () => {
-    render(<ArmConfiguration />);
-    expect(screen.getByText('Arm Configuration')).toBeInTheDocument();
-    expect(screen.getByText('USB Device')).toBeInTheDocument();
+  describe('Page Rendering', () => {
+    it('renders the main page title', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('heading', { level: 1, name: 'Arm Configuration' })).toBeInTheDocument();
+    });
+
+    it('renders the page description', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByText('Configure the ports for your leader and follower robot arms')).toBeInTheDocument();
+    });
   });
 
-  it('calls setArmConfig when port is changed', async () => {
-    render(<ArmConfiguration />);
-    fireEvent.change(screen.getByLabelText(/Port/i), { target: { value: '/dev/ttyUSB2' } });
-    // setArmConfig should be called (mocked)
+  describe('Hugging Face Credentials Section', () => {
+    it('renders Hugging Face credentials section', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('heading', { level: 3, name: 'Hugging Face Credentials' })).toBeInTheDocument();
+    });
+
+    it('renders username input field', () => {
+      render(<ArmConfiguration />);
+      const usernameInput = screen.getByPlaceholderText('Enter your Hugging Face username');
+      expect(usernameInput).toBeInTheDocument();
+      expect(usernameInput).toHaveAttribute('type', 'text');
+      expect(usernameInput).toHaveAttribute('autocomplete', 'username');
+    });
+
+    it('renders token input field', () => {
+      render(<ArmConfiguration />);
+      const tokenInput = screen.getByPlaceholderText('Enter your Hugging Face access token');
+      expect(tokenInput).toBeInTheDocument();
+      expect(tokenInput).toHaveAttribute('type', 'password');
+      expect(tokenInput).toHaveAttribute('autocomplete', 'new-password');
+    });
+
+    it('shows token status message when no token is set', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByText('No token set. Required for Hugging Face API access.')).toBeInTheDocument();
+    });
+
+    it('shows token status message when token is set', () => {
+      (store.useLeRobotStore as any).mockReturnValue({
+        ...mockStore,
+        hfToken: 'test-token'
+      });
+      render(<ArmConfiguration />);
+      expect(screen.getByText('Token is set.')).toBeInTheDocument();
+    });
+
+    it('calls setHfUser when username is changed', () => {
+      render(<ArmConfiguration />);
+      const usernameInput = screen.getByPlaceholderText('Enter your Hugging Face username');
+      fireEvent.change(usernameInput, { target: { value: 'testuser' } });
+      expect(mockStore.setHfUser).toHaveBeenCalledWith('testuser');
+    });
+
+    it('calls setHfToken when token is changed', () => {
+      render(<ArmConfiguration />);
+      const tokenInput = screen.getByPlaceholderText('Enter your Hugging Face access token');
+      fireEvent.change(tokenInput, { target: { value: 'test-token' } });
+      expect(mockStore.setHfToken).toHaveBeenCalledWith('test-token');
+    });
+
+    it('fetches environment variables from backend on mount', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ hf_user: 'envuser', hf_token: 'envtoken' })
+      });
+
+      render(<ArmConfiguration />);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/env/huggingface');
+      });
+    });
+
+    it('shows environment loaded indicator when credentials are loaded from env', async () => {
+      (store.useLeRobotStore as any).mockReturnValue({
+        ...mockStore,
+        hfUser: 'envuser',
+        hfToken: 'envtoken'
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ hf_user: 'envuser', hf_token: 'envtoken' })
+      });
+
+      render(<ArmConfiguration />);
+
+      await waitFor(() => {
+        expect(screen.getByText('✓ Loaded from system environment variables')).toBeInTheDocument();
+      });
+    });
   });
 
-  // Add more tests for camera scanning, toggling, and error handling as needed
+  describe('Arm Configuration Section', () => {
+    it('renders arm configuration section', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('heading', { level: 3, name: 'Arm Configuration' })).toBeInTheDocument();
+    });
+
+    it('renders scan ports button', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('button', { name: 'Scan for Ports' })).toBeInTheDocument();
+    });
+
+    it('renders leader arm section', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('heading', { level: 2, name: 'Leader Arm' })).toBeInTheDocument();
+      expect(screen.getByText('Primary control arm')).toBeInTheDocument();
+    });
+
+    it('renders follower arm section', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('heading', { level: 2, name: 'Follower Arm' })).toBeInTheDocument();
+      expect(screen.getByText('Secondary controlled arm')).toBeInTheDocument();
+    });
+
+    it('displays current leader port', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByText('/dev/ttyUSB0')).toBeInTheDocument();
+    });
+
+    it('displays current follower port', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByText('/dev/ttyUSB1')).toBeInTheDocument();
+    });
+
+    it('calls scanUsbPorts when scan button is clicked', async () => {
+      render(<ArmConfiguration />);
+      const scanButton = screen.getByRole('button', { name: 'Scan for Ports' });
+      
+      fireEvent.click(scanButton);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/arm-config/ports');
+      });
+    });
+
+    it('shows scanning state when scan button is clicked', async () => {
+      mockFetch.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
+      
+      render(<ArmConfiguration />);
+      const scanButton = screen.getByRole('button', { name: 'Scan for Ports' });
+      
+      fireEvent.click(scanButton);
+      
+      expect(screen.getByRole('button', { name: 'Scanning...' })).toBeInTheDocument();
+    });
+  });
+
+  describe('Camera Configuration Section', () => {
+    it('renders camera configuration section', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('heading', { level: 3, name: 'Camera Configuration' })).toBeInTheDocument();
+    });
+
+    it('renders scan cameras button', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('button', { name: 'Scan Cameras' })).toBeInTheDocument();
+    });
+
+    it('shows no cameras message when no cameras are found', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByText('No cameras found. Click "Scan Cameras" to detect available cameras.')).toBeInTheDocument();
+    });
+
+    it('calls handleScanCameras when scan cameras button is clicked', async () => {
+      render(<ArmConfiguration />);
+      const scanButton = screen.getByRole('button', { name: 'Scan Cameras' });
+      
+      fireEvent.click(scanButton);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/scan-cameras');
+      });
+    });
+
+    it('displays cameras when they are available', () => {
+      const mockCameras = [
+        { id: 'camera1', name: 'Front Camera', url: '/video/camera/0', enabled: true, index: 0 },
+        { id: 'camera2', name: 'Side Camera', url: '/video/camera/1', enabled: false, index: 1 }
+      ];
+
+      (store.useLeRobotStore as any).mockReturnValue({
+        ...mockStore,
+        cameras: mockCameras
+      });
+
+      render(<ArmConfiguration />);
+      
+      expect(screen.getByText('Front Camera')).toBeInTheDocument();
+      expect(screen.getByText('Side Camera')).toBeInTheDocument();
+    });
+  });
+
+  describe('Motor Configuration Section', () => {
+    it('renders motor configuration section', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('heading', { level: 3, name: 'Motor Configuration' })).toBeInTheDocument();
+    });
+
+    it('renders arm selection dropdown', () => {
+      render(<ArmConfiguration />);
+      const armSelect = screen.getByDisplayValue('Leader Arm');
+      expect(armSelect).toBeInTheDocument();
+    });
+
+    it('renders robot type selection dropdown', () => {
+      render(<ArmConfiguration />);
+      const robotSelect = screen.getByDisplayValue('SO-100');
+      expect(robotSelect).toBeInTheDocument();
+    });
+
+    it('renders run motor setup button', () => {
+      render(<ArmConfiguration />);
+      expect(screen.getByRole('button', { name: 'Run Motor Setup' })).toBeInTheDocument();
+    });
+
+    it('has correct arm options', () => {
+      render(<ArmConfiguration />);
+      const armSelect = screen.getByDisplayValue('Leader Arm');
+      expect(armSelect).toHaveValue('leader');
+      
+      const options = Array.from(armSelect.querySelectorAll('option'));
+      expect(options).toHaveLength(2);
+      expect(options[0]).toHaveValue('leader');
+      expect(options[1]).toHaveValue('follower');
+    });
+
+    it('has correct robot type options', () => {
+    render(<ArmConfiguration />);
+      const robotSelect = screen.getByDisplayValue('SO-100');
+      expect(robotSelect).toHaveValue('SO-100');
+      
+      const options = Array.from(robotSelect.querySelectorAll('option'));
+      expect(options).toHaveLength(2);
+      expect(options[0]).toHaveValue('SO-100');
+      expect(options[1]).toHaveValue('Giraffe');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('handles fetch error for environment variables gracefully', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      
+      render(<ArmConfiguration />);
+      
+      // Should not throw error, just log warning
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/env/huggingface');
+      });
+    });
+
+    it('handles fetch error for port detection gracefully', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      
+      render(<ArmConfiguration />);
+      const scanButton = screen.getByRole('button', { name: 'Scan for Ports' });
+      
+      fireEvent.click(scanButton);
+      
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/arm-config/ports');
+      });
+    });
+
+    it('handles fetch error for camera scanning gracefully', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      
+    render(<ArmConfiguration />);
+      const scanButton = screen.getByRole('button', { name: 'Scan Cameras' });
+      
+      fireEvent.click(scanButton);
+      
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/scan-cameras');
+      });
+    });
+  });
+
+  describe('Integration Tests', () => {
+    it('loads environment variables and updates store', async () => {
+      const mockSetHfUser = vi.fn();
+      const mockSetHfToken = vi.fn();
+      
+      (store.useLeRobotStore as any).mockReturnValue({
+        ...mockStore,
+        setHfUser: mockSetHfUser,
+        setHfToken: mockSetHfToken,
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ hf_user: 'testuser', hf_token: 'testtoken' })
+      });
+
+      render(<ArmConfiguration />);
+
+      await waitFor(() => {
+        expect(mockSetHfUser).toHaveBeenCalledWith('testuser');
+        expect(mockSetHfToken).toHaveBeenCalledWith('testtoken');
+      });
+    });
+
+    it('only updates store if values are not already set', async () => {
+      const mockSetHfUser = vi.fn();
+      const mockSetHfToken = vi.fn();
+      
+      (store.useLeRobotStore as any).mockReturnValue({
+        ...mockStore,
+        hfUser: 'existinguser',
+        hfToken: 'existingtoken',
+        setHfUser: mockSetHfUser,
+        setHfToken: mockSetHfToken,
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ hf_user: 'newuser', hf_token: 'newtoken' })
+      });
+
+      render(<ArmConfiguration />);
+
+      await waitFor(() => {
+        expect(mockSetHfUser).not.toHaveBeenCalled();
+        expect(mockSetHfToken).not.toHaveBeenCalled();
+      });
+    });
+  });
 }); 

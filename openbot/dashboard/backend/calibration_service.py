@@ -118,6 +118,8 @@ class CalibrationService:
             
             # Add initial output
             self._add_output(session_id, f"Calibration started for {robot_id} on port {port}")
+            # Emit initial step transition
+            self._add_output(session_id, "[STEP_TRANSITION] Step 0: Connection Established")
             
             # Start monitoring in a separate thread
             thread = threading.Thread(
@@ -196,6 +198,8 @@ class CalibrationService:
                                         if "move test" in line_lower and "middle of its range" in line_lower:
                                             logger.info(f"Transitioning to first_step phase for {session_id}")
                                             self._calibration_phases[session_id] = "first_step"
+                                            # Emit step transition message to frontend
+                                            self._add_output(session_id, "[STEP_TRANSITION] Step 1: Move to Middle Position")
                                             # Don't set waiting yet - let user see first step
                                     
                                     elif current_phase == "first_step":
@@ -203,6 +207,8 @@ class CalibrationService:
                                         if "move all joints" in line_lower and "entire ranges" in line_lower:
                                             logger.info(f"Transitioning to second_step phase for {session_id}")
                                             self._calibration_phases[session_id] = "second_step"
+                                            # Emit step transition message to frontend
+                                            self._add_output(session_id, "[STEP_TRANSITION] Step 2: Move All Joints")
                                             # Now set waiting for input - this is when the process actually waits
                                             self.active_sessions[session_id]["waiting_for_input"] = True
                                             logger.info(f"Set waiting_for_input=True for {session_id} after seeing second step")
@@ -214,6 +220,8 @@ class CalibrationService:
                                         logger.info(f"Detected explicit waiting for input in {session_id}: '{line}'")
                                         self.active_sessions[session_id]["waiting_for_input"] = True
                                         self._calibration_phases[session_id] = "waiting"
+                                        # Emit waiting message to frontend
+                                        self._add_output(session_id, "[WAITING_FOR_INPUT] Press Enter to continue...")
                             
                             last_output_time = time.time()
                             waiting_detected = False
@@ -246,22 +254,26 @@ class CalibrationService:
                 # Check if session was cancelled by user
                 if session_id in self.cancelled_sessions:
                     self._add_output(session_id, "Calibration cancelled by user")
+                    self._add_output(session_id, "[STEP_TRANSITION] All Steps: Cancelled")
                     logger.info(f"Calibration cancelled by user for {session_id}")
                 else:
                     # Update session status to completed
                     if session_id in self.active_sessions:
                         self.active_sessions[session_id]["status"] = "completed"
                     self._add_output(session_id, "Calibration completed successfully!")
+                    self._add_output(session_id, "[STEP_TRANSITION] All Steps: Completed")
                     logger.info(f"Calibration completed successfully for {session_id}")
             else:
                 # Check if session was cancelled by user
                 if session_id in self.cancelled_sessions:
                     self._add_output(session_id, "Calibration cancelled by user")
+                    self._add_output(session_id, "[STEP_TRANSITION] All Steps: Cancelled")
                     logger.info(f"Calibration cancelled by user for {session_id}")
                 else:
                     if session_id in self.active_sessions:
                         self.active_sessions[session_id]["status"] = "failed"
                     self._add_output(session_id, f"Calibration failed with exit code {process.poll()}")
+                    self._add_output(session_id, "[STEP_TRANSITION] Current Step: Failed")
                     logger.error(f"Calibration failed for {session_id} with exit code {process.poll()}")
                 
         except Exception as e:
