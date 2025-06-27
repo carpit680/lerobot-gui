@@ -8,6 +8,7 @@ import logging
 from backend import teleoperation_service
 from backend.motor_setup_service import MotorSetupService
 from backend.dataset_recording_service import dataset_recording_service
+from backend.dataset_replay_service import dataset_replay_service
 import cv2
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import Response
@@ -72,6 +73,13 @@ class DatasetRecordingRequest(BaseModel):
     resume: bool = True
     episode_time_s: int = 60
     reset_time_s: int = 60
+
+class DatasetReplayRequest(BaseModel):
+    robot_type: str
+    robot_port: str
+    robot_id: str
+    dataset_repo_id: str
+    episode: int = 0
 
 class MotorSetupRequest(BaseModel):
     robot_type: str
@@ -770,6 +778,120 @@ async def websocket_dataset_recording(websocket: WebSocket, session_id: str):
             
             # Get all available output messages at once
             outputs = await dataset_recording_service.get_all_output(session_id)
+            if outputs:
+                for output in outputs:
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "output",
+                            "data": output.strip()
+                        }))
+                    except Exception as e:
+                        # If we can't send, the connection is likely closed
+                        break
+            
+            # Wait a bit before checking again
+            await asyncio.sleep(0.01)
+            
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "data": str(e)
+            }))
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+@app.post("/dataset-replay/start")
+async def start_dataset_replay(request: DatasetReplayRequest):
+    """
+    Start a dataset replay process and return a session ID
+    """
+    try:
+        session_id = await dataset_replay_service.start_dataset_replay(
+            robot_type=request.robot_type,
+            robot_port=request.robot_port,
+            robot_id=request.robot_id,
+            dataset_repo_id=request.dataset_repo_id,
+            episode=request.episode
+        )
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message": f"Dataset replay started for {request.robot_id}"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start dataset replay: {str(e)}")
+
+@app.get("/dataset-replay/status/{session_id}")
+async def get_dataset_replay_status(session_id: str):
+    """
+    Get the status of a dataset replay process
+    """
+    try:
+        is_running = await dataset_replay_service.is_running(session_id)
+        
+        return {
+            "session_id": session_id,
+            "is_running": is_running,
+            "status": "running" if is_running else "finished"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+
+@app.delete("/dataset-replay/stop/{session_id}")
+async def stop_dataset_replay(session_id: str):
+    """
+    Stop a dataset replay process
+    """
+    try:
+        success = await dataset_replay_service.stop_dataset_replay(session_id)
+        
+        return {
+            "success": success,
+            "message": "Dataset replay stopped successfully" if success else "Failed to stop dataset replay"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop dataset replay: {str(e)}")
+
+@app.websocket("/ws/dataset-replay/{session_id}")
+async def websocket_dataset_replay(websocket: WebSocket, session_id: str):
+    """
+    WebSocket endpoint for real-time dataset replay output
+    """
+    await websocket.accept()
+    
+    try:
+        # Send initial connection message
+        await websocket.send_text(json.dumps({
+            "type": "status",
+            "data": {"message": "WebSocket connected", "session_id": session_id}
+        }))
+        
+        while True:
+            # Check if process is still running
+            is_running = await dataset_replay_service.is_running(session_id)
+            
+            if not is_running:
+                # Process has finished
+                await websocket.send_text(json.dumps({
+                    "type": "status",
+                    "data": {"is_running": False, "status": "finished"}
+                }))
+                break
+            
+            # Get all available output messages at once
+            outputs = await dataset_replay_service.get_all_output(session_id)
             if outputs:
                 for output in outputs:
                     try:
