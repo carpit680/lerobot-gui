@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLeRobotStore } from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 import {
@@ -8,393 +8,351 @@ import {
 } from '@heroicons/react/24/outline'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 
-interface DatasetStats {
-  totalFrames: number
-  averageFrameRate: number
-  jointRanges: { [key: string]: { min: number; max: number; avg: number } }
-  trajectoryLength: number
-  timeDistribution: { [key: string]: number }
+interface Dataset {
+  id: string;
+  name: string;
+  full_name: string;
+  author: string;
+  description: string;
+  downloads: number;
+  likes: number;
+  tags: string[];
+  last_modified: string;
+  last_modified_formatted: string;
+  created_at: string;
+  created_at_formatted: string;
+  size: number;
+  size_formatted: string;
+  card_data: any;
+  is_owner: boolean;
+}
+
+interface DatasetDetails extends Dataset {
+  siblings: any[];
+  configs: string[];
+  default_config: string;
+  citation: string;
+  homepage: string;
+  license: string;
+  paper_id: string;
+  sha: string;
+  private: boolean;
 }
 
 export default function DatasetVisualization() {
-  const { datasets, removeDataset } = useLeRobotStore()
-  const [selectedDataset, setSelectedDataset] = useState<string>('')
-  const [datasetStats, setDatasetStats] = useState<DatasetStats | null>(null)
-  const [viewMode, setViewMode] = useState<'overview' | 'trajectory' | 'joints' | 'timeline'>('overview')
+  const { hfUser, hfToken } = useLeRobotStore()
+  const [datasets, setDatasets] = useState<Dataset[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Generate mock data for visualization
-  const generateMockData = (datasetId: string) => {
-    const frameCount = datasets.find(d => d.id === datasetId)?.frameCount || 1000
-    const mockData = []
-    
-    for (let i = 0; i < Math.min(frameCount, 100); i++) {
-      mockData.push({
-        frame: i,
-        joint1: Math.sin(i * 0.1) * 30 + Math.random() * 10,
-        joint2: Math.cos(i * 0.15) * 20 + Math.random() * 8,
-        joint3: Math.sin(i * 0.2) * 25 + Math.random() * 12,
-        x: Math.sin(i * 0.05) * 100 + Math.random() * 20,
-        y: Math.cos(i * 0.08) * 80 + Math.random() * 15,
-        z: 200 + Math.sin(i * 0.12) * 50 + Math.random() * 10,
-        timestamp: i * 0.1
-      })
+  const fetchDatasets = async (query?: string) => {
+    if (!hfUser) {
+      setError('Hugging Face username not found. Please configure it in Arm Configuration.')
+      return
     }
-    
-    return mockData
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch('http://localhost:8000/dataset-visualization/fetch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: hfUser,
+          token: hfToken || undefined,
+          search_query: query || undefined,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setDatasets(data.datasets)
+        if (data.count === 0) {
+          setError(`No datasets found for user ${hfUser}${query ? ` matching "${query}"` : ''}`)
+        }
+      } else {
+        setError(data.detail || 'Failed to fetch datasets')
+      }
+    } catch (err) {
+      setError('Network error while fetching datasets')
+      console.error('Error fetching datasets:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const generateStats = (datasetId: string): DatasetStats => {
-    const dataset = datasets.find(d => d.id === datasetId)
-    if (!dataset) return {} as DatasetStats
+  const handleSearch = () => {
+    fetchDatasets(searchQuery)
+  }
 
-    return {
-      totalFrames: dataset.frameCount,
-      averageFrameRate: dataset.frameCount / dataset.duration,
-      jointRanges: {
-        'Joint 1': { min: -45, max: 45, avg: 0 },
-        'Joint 2': { min: -30, max: 30, avg: 5 },
-        'Joint 3': { min: -60, max: 60, avg: -10 },
-        'Joint 4': { min: -90, max: 90, avg: 15 },
-        'Joint 5': { min: -180, max: 180, avg: 0 },
-        'Joint 6': { min: -180, max: 180, avg: 45 }
-      },
-      trajectoryLength: Math.sqrt(dataset.frameCount * 100),
-      timeDistribution: {
-        'Movement': 60,
-        'Grasping': 20,
-        'Transport': 15,
-        'Placement': 5
+  const handleClearSearch = () => {
+    setSearchQuery('')
+    fetchDatasets()
+  }
+
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M'
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K'
+    }
+    return num.toString()
+  }
+
+  const getCleanDescription = (description: string): string => {
+    if (!description) return 'No description available'
+    
+    // Split by common separators that indicate detailed info is coming
+    const separators = [
+      '\n\n\t\n\t\t\n\t\tDataset Structure',
+      '\n\nDataset Structure',
+      '\n\n\t\n\t\t\n\t\t',
+      '\n\n\t\t\n\t\t',
+      '\n\n\t\n\t\t',
+      '\n\n\t\t',
+      '\n\nSee the full description',
+      '\n\nFor more information',
+      '\n\nAdditional information'
+    ]
+    
+    let cleanDesc = description
+    for (const separator of separators) {
+      const parts = cleanDesc.split(separator)
+      if (parts.length > 1) {
+        cleanDesc = parts[0].trim()
+        break
       }
     }
+    
+    // Remove any trailing dots or ellipsis
+    cleanDesc = cleanDesc.replace(/\.{2,}$/, '')
+    
+    // Truncate if too long (max 150 characters)
+    if (cleanDesc.length > 150) {
+      cleanDesc = cleanDesc.substring(0, 147) + '...'
+    }
+    
+    return cleanDesc || 'No description available'
   }
 
   useEffect(() => {
-    if (selectedDataset) {
-      setDatasetStats(generateStats(selectedDataset))
+    if (hfUser) {
+      fetchDatasets()
     }
-  }, [selectedDataset, datasets])
+  }, [hfUser])
 
-  const handleDeleteDataset = (datasetId: string) => {
-    if (confirm('Are you sure you want to delete this dataset?')) {
-      removeDataset(datasetId)
-      if (selectedDataset === datasetId) {
-        setSelectedDataset('')
-        setDatasetStats(null)
-      }
-      toast.success('Dataset deleted')
-    }
-  }
-
-  const formatFileSize = (bytes: number) => {
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    if (bytes === 0) return '0 Bytes'
-    const i = Math.floor(Math.log(bytes) / Math.log(1024))
-    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
-  }
-
-  const formatDuration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-    return `${hours}h ${minutes}m ${secs}s`
-  }
-
-  const mockData = selectedDataset ? generateMockData(selectedDataset) : []
-
-  return (
-    <div className="px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 font-heading">Dataset Visualization</h1>
-        <p className="mt-2 text-gray-600">
-          Visualize and analyze your recorded datasets
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Dataset List */}
-        <div className="lg:col-span-1">
-          <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 font-heading mb-4">Datasets</h2>
-            
-            <div className="space-y-3">
-              {datasets.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No datasets available</p>
-              ) : (
-                datasets.map(dataset => (
-                  <div
-                    key={dataset.id}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedDataset === dataset.id
-                        ? 'border-primary-300 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                    onClick={() => setSelectedDataset(dataset.id)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-900 truncate">
-                          {dataset.name}
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          {new Date(dataset.createdAt).toLocaleDateString()}
-                        </p>
-                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                          <span>{dataset.frameCount} frames</span>
-                          <span>{formatFileSize(dataset.size)}</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteDataset(dataset.id)
-                        }}
-                        className="text-red-500 hover:text-red-700 p-1"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+  if (!hfUser) {
+    return (
+      <div className="p-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
             </div>
-          </div>
-        </div>
-
-        {/* Visualization Area */}
-        <div className="lg:col-span-3">
-          {selectedDataset && datasetStats ? (
-            <div className="space-y-6">
-              {/* Dataset Info */}
-              <div className="card">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900 font-heading">
-                    {datasets.find(d => d.id === selectedDataset)?.name}
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <button className="btn-secondary">
-                      <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                      Export
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary-600">
-                      {datasetStats.totalFrames.toLocaleString()}
-                    </div>
-                    <div className="text-sm text-gray-600">Total Frames</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {datasetStats.averageFrameRate.toFixed(1)}
-                    </div>
-                    <div className="text-sm text-gray-600">FPS</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {formatDuration(datasets.find(d => d.id === selectedDataset)?.duration || 0)}
-                    </div>
-                    <div className="text-sm text-gray-600">Duration</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {formatFileSize(datasets.find(d => d.id === selectedDataset)?.size || 0)}
-                    </div>
-                    <div className="text-sm text-gray-600">Size</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* View Mode Tabs */}
-              <div className="card">
-                <div className="flex items-center gap-4 mb-4">
-                  <button
-                    onClick={() => setViewMode('overview')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      viewMode === 'overview'
-                        ? 'bg-primary-100 text-primary-700'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Overview
-                  </button>
-                  <button
-                    onClick={() => setViewMode('trajectory')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      viewMode === 'trajectory'
-                        ? 'bg-primary-100 text-primary-700'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Trajectory
-                  </button>
-                  <button
-                    onClick={() => setViewMode('joints')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      viewMode === 'joints'
-                        ? 'bg-primary-100 text-primary-700'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Joints
-                  </button>
-                  <button
-                    onClick={() => setViewMode('timeline')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      viewMode === 'timeline'
-                        ? 'bg-primary-100 text-primary-700'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Timeline
-                  </button>
-                </div>
-
-                {/* Overview Chart */}
-                {viewMode === 'overview' && (
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Time Distribution</h3>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={Object.entries(datasetStats.timeDistribution).map(([key, value]) => ({
-                            activity: key,
-                            percentage: value
-                          }))}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="activity" />
-                            <YAxis />
-                            <Tooltip />
-                            <Bar dataKey="percentage" fill="#3b82f6" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Joint Ranges</h3>
-                        <div className="space-y-3">
-                          {Object.entries(datasetStats.jointRanges).map(([joint, range]) => (
-                            <div key={joint}>
-                              <div className="flex justify-between text-sm mb-1">
-                                <span className="text-gray-600">{joint}</span>
-                                <span className="text-gray-900">
-                                  {range.min}° - {range.max}° (avg: {range.avg}°)
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div
-                                  className="bg-primary-600 h-2 rounded-full"
-                                  style={{
-                                    width: `${((range.max - range.min) / 360) * 100}%`,
-                                    marginLeft: `${((range.avg + 180) / 360) * 100}%`
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Trajectory Overview</h3>
-                        <div className="h-48">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={mockData.slice(0, 50)}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="frame" />
-                              <YAxis />
-                              <Tooltip />
-                              <Line type="monotone" dataKey="x" stroke="#ef4444" strokeWidth={2} />
-                              <Line type="monotone" dataKey="y" stroke="#10b981" strokeWidth={2} />
-                              <Line type="monotone" dataKey="z" stroke="#3b82f6" strokeWidth={2} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Trajectory Chart */}
-                {viewMode === 'trajectory' && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">3D Trajectory</h3>
-                    <div className="h-96">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={mockData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="x" />
-                          <YAxis dataKey="y" />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="z" stroke="#3b82f6" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-
-                {/* Joint Charts */}
-                {viewMode === 'joints' && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Joint Angles Over Time</h3>
-                    <div className="h-96">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={mockData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="timestamp" />
-                          <YAxis />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="joint1" stroke="#ef4444" strokeWidth={2} />
-                          <Line type="monotone" dataKey="joint2" stroke="#10b981" strokeWidth={2} />
-                          <Line type="monotone" dataKey="joint3" stroke="#3b82f6" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-
-                {/* Timeline */}
-                {viewMode === 'timeline' && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Activity Timeline</h3>
-                    <div className="space-y-4">
-                      {Object.entries(datasetStats.timeDistribution).map(([activity, percentage]) => (
-                        <div key={activity} className="flex items-center gap-4">
-                          <div className="w-24 text-sm font-medium text-gray-700">
-                            {activity}
-                          </div>
-                          <div className="flex-1 bg-gray-200 rounded-full h-4">
-                            <div
-                              className="bg-primary-600 h-4 rounded-full"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                          <div className="w-16 text-sm text-gray-600 text-right">
-                            {percentage}%
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="card">
-              <div className="text-center py-12">
-                <ChartBarIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Dataset Selected</h3>
-                <p className="text-gray-600">
-                  Select a dataset from the list to view its visualization
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">
+                Hugging Face Username Required
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>
+                  Please configure your Hugging Face username in the Arm Configuration page to view your datasets.
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dataset Visualization</h1>
+        <p className="text-gray-600">
+          View and explore your datasets from Hugging Face
+        </p>
+        <div className="mt-2 text-sm text-gray-500">
+          User: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{hfUser}</span>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="mb-6">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Search datasets..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <button
+            onClick={handleSearch}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Searching...' : 'Search'}
+          </button>
+          {searchQuery && (
+            <button
+              onClick={handleClearSearch}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            >
+              Clear
+            </button>
           )}
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error</h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>{error}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-gray-600">Loading datasets...</span>
+        </div>
+      )}
+
+      {/* Datasets Grid */}
+      {!loading && datasets.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {datasets.map((dataset) => (
+            <div
+              key={dataset.id}
+              className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
+            >
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 truncate">
+                    {dataset.name}
+                  </h3>
+                  {dataset.is_owner && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Owner
+                    </span>
+                  )}
+                </div>
+                
+                <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                  {getCleanDescription(dataset.description)}
+                </p>
+                
+                <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                  <span>👤 {dataset.author}</span>
+                  <span>📅 {dataset.last_modified_formatted}</span>
+                </div>
+                
+                <div className="flex items-center justify-between text-sm mb-4">
+                  <span className="text-gray-600">
+                    📥 {formatNumber(dataset.downloads)} downloads
+                  </span>
+                  <span className="text-gray-600">
+                    ❤️ {formatNumber(dataset.likes)} likes
+                  </span>
+                </div>
+                
+                {dataset.size_formatted && (
+                  <div className="flex items-center justify-between text-sm mb-4">
+                    <span className="text-gray-600">
+                      📊 {dataset.size_formatted}
+                    </span>
+                    <span className="text-gray-600">
+                      🏷️ {dataset.tags.length} tags
+                    </span>
+                  </div>
+                )}
+                
+                {!dataset.size_formatted && (
+                  <div className="flex items-center justify-end text-sm mb-4">
+                    <span className="text-gray-600">
+                      🏷️ {dataset.tags.length} tags
+                    </span>
+                  </div>
+                )}
+                
+                {dataset.tags.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex flex-wrap gap-1">
+                      {dataset.tags.slice(0, 3).map((tag, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {dataset.tags.length > 3 && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                          +{dataset.tags.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex gap-2">
+                  <a
+                    href={`https://huggingface.co/spaces/lerobot/visualize_dataset?path=%2F${dataset.author}%2F${dataset.name}%2Fepisode_0`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 text-center"
+                  >
+                    Visualize
+                  </a>
+                  <a
+                    href={`https://huggingface.co/datasets/${dataset.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200"
+                  >
+                    Open
+                  </a>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No Datasets */}
+      {!loading && datasets.length === 0 && !error && (
+        <div className="text-center py-12">
+          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No datasets found</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Get started by creating your first dataset.
+          </p>
+        </div>
+      )}
     </div>
   )
 } 

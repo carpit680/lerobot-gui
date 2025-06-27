@@ -9,6 +9,7 @@ from backend import teleoperation_service
 from backend.motor_setup_service import MotorSetupService
 from backend.dataset_recording_service import dataset_recording_service
 from backend.dataset_replay_service import dataset_replay_service
+from backend.dataset_visualization_service import dataset_visualization_service
 import cv2
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import Response
@@ -88,6 +89,15 @@ class MotorSetupRequest(BaseModel):
 class MotorSetupInputRequest(BaseModel):
     session_id: str
     input_data: str
+
+class DatasetVisualizationRequest(BaseModel):
+    username: str
+    token: Optional[str] = None
+    search_query: Optional[str] = None
+
+class DatasetDetailsRequest(BaseModel):
+    dataset_id: str
+    token: Optional[str] = None
 
 @app.get("/")
 async def root():
@@ -921,6 +931,58 @@ async def websocket_dataset_replay(websocket: WebSocket, session_id: str):
             await websocket.close()
         except Exception:
             pass
+
+@app.post("/dataset-visualization/fetch")
+async def fetch_user_datasets(request: DatasetVisualizationRequest):
+    """
+    Fetch all datasets for a given user from Hugging Face API
+    """
+    try:
+        if request.search_query:
+            datasets = await dataset_visualization_service.search_datasets(
+                query=request.search_query,
+                username=request.username,
+                token=request.token
+            )
+        else:
+            datasets = await dataset_visualization_service.get_user_datasets(
+                username=request.username,
+                token=request.token
+            )
+        
+        return {
+            "success": True,
+            "datasets": datasets,
+            "count": len(datasets),
+            "username": request.username
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch datasets: {str(e)}")
+
+@app.post("/dataset-visualization/details")
+async def get_dataset_details(request: DatasetDetailsRequest):
+    """
+    Fetch detailed information about a specific dataset
+    """
+    try:
+        dataset_details = await dataset_visualization_service.get_dataset_details(
+            dataset_id=request.dataset_id,
+            token=request.token
+        )
+        
+        if dataset_details:
+            return {
+                "success": True,
+                "dataset": dataset_details
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Dataset {request.dataset_id} not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch dataset details: {str(e)}")
 
 @app.get("/env/huggingface")
 async def get_huggingface_env():
