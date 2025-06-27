@@ -6,6 +6,8 @@ A comprehensive web-based dashboard for the Hugging Face LeRobot framework, prov
 
 ### 🤖 Arm Configuration
 - Configure leader and follower arm ports
+- **Robot Type Selection**: Choose from supported robot types (SO-100, Giraffe v1.1)
+- **Robot ID Assignment**: Set unique identifiers for each arm
 - Real-time connection status monitoring
 - Port selection with common defaults
 - Connection testing and validation
@@ -131,7 +133,10 @@ src/
   - Credentials are automatically loaded from system environment variables if available
   - Manually enter your Hugging Face username and access token if needed
   - These credentials are used for Hugging Face API access across the application
-- Select appropriate ports for leader and follower arms
+- **Robot Configuration**:
+  - Select appropriate ports for leader and follower arms
+  - Choose robot type from the dropdown (SO-100 or Giraffe v1.1)
+  - Assign unique robot IDs for each arm (e.g., "leader_001", "follower_001")
 - Test connections
 - Verify both arms are connected before proceeding
 

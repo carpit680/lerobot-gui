@@ -13,6 +13,11 @@ interface UsbPort {
   lastSeen: Date
 }
 
+const robotTypes = [
+  { value: 'so100', label: 'SO-100' },
+  { value: 'giraffe', label: 'Giraffe v1.1' },
+]
+
 export default function ArmConfiguration() {
   const { armConfig, setArmConfig, cameras, setCameras, toggleCamera, hfUser, setHfUser, hfToken, setHfToken } = useLeRobotStore()
   const [usbPorts, setUsbPorts] = useState<UsbPort[]>([])
@@ -32,6 +37,12 @@ export default function ArmConfiguration() {
   const [motorConfigSessionId, setMotorConfigSessionId] = useState<string | null>(null);
   const [isSendingMotorInput, setIsSendingMotorInput] = useState(false);
   const [envLoaded, setEnvLoaded] = useState(false);
+
+  // Debounced robot ID states
+  const [leaderRobotIdInput, setLeaderRobotIdInput] = useState(armConfig.leaderRobotId)
+  const [followerRobotIdInput, setFollowerRobotIdInput] = useState(armConfig.followerRobotId)
+  const leaderRobotIdTimeoutRef = useRef<number | null>(null)
+  const followerRobotIdTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     setCameraList(cameras)
@@ -101,6 +112,45 @@ export default function ArmConfiguration() {
       [`${armType}Port`]: port
     })
     toast.success(`${armType.charAt(0).toUpperCase() + armType.slice(1)} arm port set to ${port}`)
+  }
+
+  const handleRobotTypeChange = (armType: 'leader' | 'follower', robotType: string) => {
+    const fullRobotType = robotType ? `${robotType}_${armType}` : ''
+    setArmConfig({
+      [`${armType}RobotType`]: fullRobotType
+    })
+    const displayName = robotType === 'so100' ? 'SO-100' : robotType === 'giraffe' ? 'Giraffe v1.1' : robotType
+    toast.success(`${armType.charAt(0).toUpperCase() + armType.slice(1)} arm robot type set to ${displayName}`)
+  }
+
+  const handleRobotIdChange = (armType: 'leader' | 'follower', robotId: string) => {
+    if (armType === 'leader') {
+      setLeaderRobotIdInput(robotId)
+      // Clear existing timeout
+      if (leaderRobotIdTimeoutRef.current) {
+        clearTimeout(leaderRobotIdTimeoutRef.current)
+      }
+      // Set new timeout
+      leaderRobotIdTimeoutRef.current = setTimeout(() => {
+        setArmConfig({
+          leaderRobotId: robotId
+        })
+        toast.success(`Leader arm robot ID set to ${robotId}`)
+      }, 1000)
+    } else {
+      setFollowerRobotIdInput(robotId)
+      // Clear existing timeout
+      if (followerRobotIdTimeoutRef.current) {
+        clearTimeout(followerRobotIdTimeoutRef.current)
+      }
+      // Set new timeout
+      followerRobotIdTimeoutRef.current = setTimeout(() => {
+        setArmConfig({
+          followerRobotId: robotId
+        })
+        toast.success(`Follower arm robot ID set to ${robotId}`)
+      }, 1000)
+    }
   }
 
   const handleToggleCamera = (id: string) => {
@@ -317,6 +367,27 @@ export default function ArmConfiguration() {
     };
   }, []);
 
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (leaderRobotIdTimeoutRef.current) {
+        clearTimeout(leaderRobotIdTimeoutRef.current)
+      }
+      if (followerRobotIdTimeoutRef.current) {
+        clearTimeout(followerRobotIdTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Update input values when store values change
+  useEffect(() => {
+    setLeaderRobotIdInput(armConfig.leaderRobotId)
+  }, [armConfig.leaderRobotId])
+
+  useEffect(() => {
+    setFollowerRobotIdInput(armConfig.followerRobotId)
+  }, [armConfig.followerRobotId])
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -397,15 +468,14 @@ export default function ArmConfiguration() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Port
+                      Port Selection
                     </label>
                     <select
                       value={armConfig.leaderPort}
-                      onChange={(e) => handlePortChange('leader', e.target.value)}
-                      className="input-field"
-                      disabled={isScanning}
+                      onChange={(e) => setArmConfig({ leaderPort: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     >
-                      <option value="">{isScanning ? 'Scanning...' : 'Select Leader Arm Port'}</option>
+                      <option value="">Select a port</option>
                       {usbPorts.map((port) => (
                         <option key={port.path} value={port.path}>
                           {port.name} ({port.path})
@@ -414,8 +484,44 @@ export default function ArmConfiguration() {
                     </select>
                   </div>
 
-                  <div className="text-sm text-gray-600">
-                    <p>Current port: <span className="font-medium">{armConfig.leaderPort || 'Not selected'}</span></p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Robot Type
+                    </label>
+                    <select
+                      value={armConfig.leaderRobotType.replace('_leader', '')}
+                      onChange={(e) => handleRobotTypeChange('leader', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                      <option value="">Select robot type</option>
+                      {robotTypes.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Robot ID
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter robot ID"
+                      value={leaderRobotIdInput}
+                      onChange={(e) => {
+                        setLeaderRobotIdInput(e.target.value)
+                        if (leaderRobotIdTimeoutRef.current) {
+                          clearTimeout(leaderRobotIdTimeoutRef.current)
+                        }
+                        leaderRobotIdTimeoutRef.current = window.setTimeout(() => {
+                          setArmConfig({ leaderRobotId: e.target.value })
+                          toast.success('Leader arm robot ID saved')
+                        }, 1000)
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
                   </div>
                 </div>
               </div>
@@ -434,15 +540,14 @@ export default function ArmConfiguration() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Port
+                      Port Selection
                     </label>
                     <select
                       value={armConfig.followerPort}
-                      onChange={(e) => handlePortChange('follower', e.target.value)}
-                      className="input-field"
-                      disabled={isScanning}
+                      onChange={(e) => setArmConfig({ followerPort: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     >
-                      <option value="">{isScanning ? 'Scanning...' : 'Select Follower Arm Port'}</option>
+                      <option value="">Select a port</option>
                       {usbPorts.map((port) => (
                         <option key={port.path} value={port.path}>
                           {port.name} ({port.path})
@@ -451,8 +556,44 @@ export default function ArmConfiguration() {
                     </select>
                   </div>
 
-                  <div className="text-sm text-gray-600">
-                    <p>Current port: <span className="font-medium">{armConfig.followerPort || 'Not selected'}</span></p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Robot Type
+                    </label>
+                    <select
+                      value={armConfig.followerRobotType.replace('_follower', '')}
+                      onChange={(e) => handleRobotTypeChange('follower', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                      <option value="">Select robot type</option>
+                      {robotTypes.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Robot ID
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter robot ID"
+                      value={followerRobotIdInput}
+                      onChange={(e) => {
+                        setFollowerRobotIdInput(e.target.value)
+                        if (followerRobotIdTimeoutRef.current) {
+                          clearTimeout(followerRobotIdTimeoutRef.current)
+                        }
+                        followerRobotIdTimeoutRef.current = window.setTimeout(() => {
+                          setArmConfig({ followerRobotId: e.target.value })
+                          toast.success('Follower arm robot ID saved')
+                        }, 1000)
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
                   </div>
                 </div>
               </div>

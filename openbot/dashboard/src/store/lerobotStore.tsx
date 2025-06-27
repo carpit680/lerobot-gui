@@ -6,6 +6,10 @@ export interface ArmConfig {
   followerPort: string
   leaderConnected: boolean
   followerConnected: boolean
+  leaderRobotType: string
+  followerRobotType: string
+  leaderRobotId: string
+  followerRobotId: string
 }
 
 export interface CameraConfig {
@@ -86,6 +90,10 @@ export const useLeRobotStore = create<LeRobotState>((set) => ({
     followerPort: '/dev/ttyUSB1',
     leaderConnected: false,
     followerConnected: false,
+    leaderRobotType: '',
+    followerRobotType: '',
+    leaderRobotId: '',
+    followerRobotId: '',
   },
   setArmConfig: (config) => set((state) => ({
     armConfig: { ...state.armConfig, ...config }

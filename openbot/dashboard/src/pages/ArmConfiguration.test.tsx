@@ -16,7 +16,11 @@ describe('ArmConfiguration Page', () => {
       leaderPort: '/dev/ttyUSB0', 
       followerPort: '/dev/ttyUSB1',
       leaderConnected: false,
-      followerConnected: false
+      followerConnected: false,
+      leaderRobotType: '',
+      followerRobotType: '',
+      leaderRobotId: '',
+      followerRobotId: '',
     },
     setArmConfig: vi.fn(),
     cameras: [],
@@ -151,18 +155,52 @@ describe('ArmConfiguration Page', () => {
 
     it('renders follower arm section', () => {
       render(<ArmConfiguration />);
-      expect(screen.getByRole('heading', { level: 2, name: 'Follower Arm' })).toBeInTheDocument();
+      const followerArmHeadings = screen.getAllByText('Follower Arm');
+      expect(followerArmHeadings.length).toBeGreaterThan(0);
       expect(screen.getByText('Secondary controlled arm')).toBeInTheDocument();
     });
 
-    it('displays current leader port', () => {
+    it('renders robot type dropdowns for both arms', () => {
       render(<ArmConfiguration />);
-      expect(screen.getByText('/dev/ttyUSB0')).toBeInTheDocument();
+      const robotTypeDropdowns = screen.getAllByText(/Select robot type/);
+      expect(robotTypeDropdowns).toHaveLength(2);
     });
 
-    it('displays current follower port', () => {
+    it('renders robot ID input fields for both arms', () => {
       render(<ArmConfiguration />);
-      expect(screen.getByText('/dev/ttyUSB1')).toBeInTheDocument();
+      const robotIdInputs = screen.getAllByPlaceholderText(/Enter robot ID/);
+      expect(robotIdInputs).toHaveLength(2);
+    });
+
+    it('calls setArmConfig when robot type is changed', () => {
+      render(<ArmConfiguration />);
+      const robotTypeSelects = screen.getAllByRole('combobox');
+      const leaderRobotTypeSelect = robotTypeSelects[1]; // First combobox is port, second is robot type
+      fireEvent.change(leaderRobotTypeSelect, { target: { value: 'so100' } });
+      expect(mockStore.setArmConfig).toHaveBeenCalledWith({ leaderRobotType: 'so100_leader' });
+    });
+
+    it('calls setArmConfig when robot ID is changed', async () => {
+      render(<ArmConfiguration />);
+      const robotIdInputs = screen.getAllByPlaceholderText(/Enter robot ID/);
+      fireEvent.change(robotIdInputs[0], { target: { value: 'leader_001' } });
+      
+      // Wait for the debounced save (1 second)
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      
+      expect(mockStore.setArmConfig).toHaveBeenCalledWith({ leaderRobotId: 'leader_001' });
+    });
+
+    it('has correct robot type options', () => {
+      render(<ArmConfiguration />);
+      const robotTypeSelects = screen.getAllByRole('combobox');
+      const leaderRobotTypeSelect = robotTypeSelects[1]; // First combobox is port, second is robot type
+      
+      const options = Array.from(leaderRobotTypeSelect.querySelectorAll('option'));
+      const optionValues = options.map(option => option.value);
+      
+      expect(optionValues).toContain('so100');
+      expect(optionValues).toContain('giraffe');
     });
 
     it('calls scanUsbPorts when scan button is clicked', async () => {

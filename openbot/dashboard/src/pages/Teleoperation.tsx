@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useLeRobotStore } from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 import {
@@ -14,7 +14,7 @@ const robotTypes = [
 ]
 
 export default function Teleoperation() {
-  const { armConfig, cameras, hfUser, hfToken } = useLeRobotStore()
+  const { armConfig, cameras } = useLeRobotStore()
   const [isTeleoperating, setIsTeleoperating] = useState(false)
   const [leaderType, setLeaderType] = useState('giraffe')
   const [followerType, setFollowerType] = useState('giraffe')
@@ -23,12 +23,15 @@ export default function Teleoperation() {
   const [sessionId, setSessionId] = useState('')
   const [output, setOutput] = useState<string[]>([])
   const [websocket, setWebsocket] = useState<WebSocket | null>(null)
-  const [isRunning, setIsRunning] = useState(false)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
   const [selectedCameras, setSelectedCameras] = useState<string[]>([])
   const [jointPositions, setJointPositions] = useState<{[key: string]: number}>({})
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('')
   const [updateFrequency, setUpdateFrequency] = useState<string>('')
+  const [selectedCamera, setSelectedCamera] = useState('')
+  const [controlMode, setControlMode] = useState('joint')
+  const [speed, setSpeed] = useState(50)
+  const [sensitivity, setSensitivity] = useState(50)
 
   // Function to parse table data and extract joint positions
   const parseTableData = (tableText: string) => {
@@ -106,7 +109,6 @@ export default function Teleoperation() {
       return
     }
     setIsTeleoperating(true)
-    setIsRunning(true)
     setOutput([])
     try {
       const response = await fetch(`${BACKEND_URL}/teleop/start`, {
@@ -140,7 +142,6 @@ export default function Teleoperation() {
     } catch (error) {
       toast.error('Failed to start teleoperation')
       setIsTeleoperating(false)
-      setIsRunning(false)
     }
   }
 
@@ -149,7 +150,6 @@ export default function Teleoperation() {
     try {
       await fetch(`${BACKEND_URL}/teleop/stop/${sessionId}`, { method: 'DELETE' })
     setIsTeleoperating(false)
-      setIsRunning(false)
       setSessionId('')
       setOutput([])
       if (websocket) {
@@ -193,7 +193,6 @@ export default function Teleoperation() {
         setUpdateFrequency(freqInfo)
       } else if (data.type === 'status') {
         if (data.data.status === 'finished') {
-          setIsRunning(false)
           setIsTeleoperating(false)
           toast.success('Teleoperation finished')
         }

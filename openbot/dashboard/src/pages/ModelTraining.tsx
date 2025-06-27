@@ -29,7 +29,7 @@ interface TrainingProgress {
 }
 
 export default function ModelTraining() {
-  const { datasets, trainingConfig, setTrainingConfig, isTraining, setTraining, hfUser, hfToken } = useLeRobotStore()
+  const { datasets, trainingConfig, setTrainingConfig, isTraining, setTraining } = useLeRobotStore()
   const [selectedDatasets, setSelectedDatasets] = useState<string[]>([])
   const [trainingProgress, setTrainingProgress] = useState<TrainingProgress | null>(null)
   const [trainingMetrics, setTrainingMetrics] = useState<TrainingMetrics[]>([])
