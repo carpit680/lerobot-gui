@@ -7,6 +7,7 @@ import asyncio
 import logging
 from backend import teleoperation_service
 from backend.motor_setup_service import MotorSetupService
+from backend.dataset_recording_service import dataset_recording_service
 import cv2
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import Response
@@ -54,6 +55,23 @@ class TeleoperationRequest(BaseModel):
     follower_port: str
     follower_id: str
     cameras: Optional[list] = None
+
+class DatasetRecordingRequest(BaseModel):
+    robot_type: str
+    robot_port: str
+    robot_id: str
+    teleop_type: str
+    teleop_port: str
+    teleop_id: str
+    cameras: Optional[list] = None
+    display_data: bool = True
+    dataset_repo_id: Optional[str] = None
+    num_episodes: int = 5
+    single_task: Optional[str] = None
+    push_to_hub: bool = False
+    resume: bool = True
+    episode_time_s: int = 60
+    reset_time_s: int = 60
 
 class MotorSetupRequest(BaseModel):
     robot_type: str
@@ -649,14 +667,138 @@ async def send_motor_setup_input(request: MotorSetupInputRequest):
 
 @app.delete("/motor-setup/stop/{session_id}")
 async def stop_motor_setup(session_id: str):
-    """
-    Stop a motor setup process
-    """
     try:
-        success = motor_setup_service.stop_session(session_id)
-        return {"success": success, "message": "Motor setup stopped" if success else "Failed to stop motor setup"}
+        success = await motor_setup_service.stop_motor_setup(session_id)
+        return {
+            "success": success,
+            "message": "Motor setup stopped successfully" if success else "Failed to stop motor setup"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop motor setup: {str(e)}")
+
+@app.post("/dataset-recording/start")
+async def start_dataset_recording(request: DatasetRecordingRequest):
+    """
+    Start a dataset recording process and return a session ID
+    """
+    try:
+        session_id = await dataset_recording_service.start_dataset_recording(
+            robot_type=request.robot_type,
+            robot_port=request.robot_port,
+            robot_id=request.robot_id,
+            teleop_type=request.teleop_type,
+            teleop_port=request.teleop_port,
+            teleop_id=request.teleop_id,
+            cameras=request.cameras,
+            display_data=request.display_data,
+            dataset_repo_id=request.dataset_repo_id,
+            num_episodes=request.num_episodes,
+            single_task=request.single_task,
+            push_to_hub=request.push_to_hub,
+            resume=request.resume,
+            episode_time_s=request.episode_time_s,
+            reset_time_s=request.reset_time_s
+        )
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message": f"Dataset recording started for {request.robot_id}"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start dataset recording: {str(e)}")
+
+@app.get("/dataset-recording/status/{session_id}")
+async def get_dataset_recording_status(session_id: str):
+    """
+    Get the status of a dataset recording process
+    """
+    try:
+        is_running = await dataset_recording_service.is_running(session_id)
+        
+        return {
+            "session_id": session_id,
+            "is_running": is_running,
+            "status": "running" if is_running else "finished"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+
+@app.delete("/dataset-recording/stop/{session_id}")
+async def stop_dataset_recording(session_id: str):
+    """
+    Stop a dataset recording process
+    """
+    try:
+        success = await dataset_recording_service.stop_dataset_recording(session_id)
+        
+        return {
+            "success": success,
+            "message": "Dataset recording stopped successfully" if success else "Failed to stop dataset recording"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop dataset recording: {str(e)}")
+
+@app.websocket("/ws/dataset-recording/{session_id}")
+async def websocket_dataset_recording(websocket: WebSocket, session_id: str):
+    """
+    WebSocket endpoint for real-time dataset recording output
+    """
+    await websocket.accept()
+    
+    try:
+        # Send initial connection message
+        await websocket.send_text(json.dumps({
+            "type": "status",
+            "data": {"message": "WebSocket connected", "session_id": session_id}
+        }))
+        
+        while True:
+            # Check if process is still running
+            is_running = await dataset_recording_service.is_running(session_id)
+            
+            if not is_running:
+                # Process has finished
+                await websocket.send_text(json.dumps({
+                    "type": "status",
+                    "data": {"is_running": False, "status": "finished"}
+                }))
+                break
+            
+            # Get all available output messages at once
+            outputs = await dataset_recording_service.get_all_output(session_id)
+            if outputs:
+                for output in outputs:
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "output",
+                            "data": output.strip()
+                        }))
+                    except Exception as e:
+                        # If we can't send, the connection is likely closed
+                        break
+            
+            # Wait a bit before checking again
+            await asyncio.sleep(0.01)
+            
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "data": str(e)
+            }))
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 @app.get("/env/huggingface")
 async def get_huggingface_env():
