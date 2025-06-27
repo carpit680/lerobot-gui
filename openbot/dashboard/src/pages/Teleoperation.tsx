@@ -16,10 +16,6 @@ const robotTypes = [
 export default function Teleoperation() {
   const { armConfig, cameras } = useLeRobotStore()
   const [isTeleoperating, setIsTeleoperating] = useState(false)
-  const [leaderType, setLeaderType] = useState('giraffe')
-  const [followerType, setFollowerType] = useState('giraffe')
-  const [leaderId, setLeaderId] = useState('giraffe_leader')
-  const [followerId, setFollowerId] = useState('giraffe_follower')
   const [sessionId, setSessionId] = useState('')
   const [output, setOutput] = useState<string[]>([])
   const [websocket, setWebsocket] = useState<WebSocket | null>(null)
@@ -32,6 +28,12 @@ export default function Teleoperation() {
   const [controlMode, setControlMode] = useState('joint')
   const [speed, setSpeed] = useState(50)
   const [sensitivity, setSensitivity] = useState(50)
+
+  // Get robot type and ID from store
+  const leaderType = armConfig.leaderRobotType
+  const followerType = armConfig.followerRobotType
+  const leaderId = armConfig.leaderRobotId
+  const followerId = armConfig.followerRobotId
 
   // Function to parse table data and extract joint positions
   const parseTableData = (tableText: string) => {
@@ -100,8 +102,12 @@ export default function Teleoperation() {
       toast.error('Please configure both leader and follower arm ports')
       return
     }
-    if (!leaderId.trim() || !followerId.trim()) {
-      toast.error('Please provide unique IDs for both arms')
+    if (!leaderType || !followerType) {
+      toast.error('Please configure robot types for both arms in Arm Configuration')
+      return
+    }
+    if (!leaderId || !followerId) {
+      toast.error('Please configure robot IDs for both arms in Arm Configuration')
       return
     }
     if (backendConnected !== true) {
@@ -115,10 +121,10 @@ export default function Teleoperation() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          leader_type: `${leaderType}_leader`,
+          leader_type: leaderType,
           leader_port: leaderPort,
           leader_id: leaderId,
-          follower_type: `${followerType}_follower`,
+          follower_type: followerType,
           follower_port: followerPort,
           follower_id: followerId,
           cameras: selectedCameras.map(cameraId => {
@@ -245,16 +251,9 @@ export default function Teleoperation() {
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Arm Type</label>
-                  <select
-                    value={leaderType}
-                    onChange={e => setLeaderType(e.target.value)}
-                    className="input-field"
-                    disabled={isTeleoperating}
-                  >
-                    {robotTypes.map(robot => (
-                      <option key={robot.id} value={robot.id}>{robot.name} - {robot.description}</option>
-                    ))}
-                  </select>
+                  <div className="input-field bg-gray-50 text-gray-700">
+                    {leaderType || 'Not configured'}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
@@ -264,14 +263,9 @@ export default function Teleoperation() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
-                  <input
-                    type="text"
-                    value={leaderId}
-                    onChange={e => setLeaderId(e.target.value)}
-                    className="input-field"
-                    disabled={isTeleoperating}
-                    placeholder="Enter leader arm ID"
-                  />
+                  <div className="input-field bg-gray-50 text-gray-700">
+                    {leaderId || 'Not configured'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -282,16 +276,9 @@ export default function Teleoperation() {
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Arm Type</label>
-                  <select
-                    value={followerType}
-                    onChange={e => setFollowerType(e.target.value)}
-                    className="input-field"
-                    disabled={isTeleoperating}
-                  >
-                    {robotTypes.map(robot => (
-                      <option key={robot.id} value={robot.id}>{robot.name} - {robot.description}</option>
-                    ))}
-                  </select>
+                  <div className="input-field bg-gray-50 text-gray-700">
+                    {followerType || 'Not configured'}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
@@ -301,14 +288,9 @@ export default function Teleoperation() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
-                  <input
-                    type="text"
-                    value={followerId}
-                    onChange={e => setFollowerId(e.target.value)}
-                    className="input-field"
-                    disabled={isTeleoperating}
-                    placeholder="Enter follower arm ID"
-                  />
+                  <div className="input-field bg-gray-50 text-gray-700">
+                    {followerId || 'Not configured'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -342,7 +324,7 @@ export default function Teleoperation() {
             <div className="flex gap-4 pt-4 border-t">
               <button
                 onClick={startTeleoperation}
-                disabled={isTeleoperating || !armConfig.leaderPort || !armConfig.followerPort || !leaderId.trim() || !followerId.trim() || backendConnected === false}
+                disabled={isTeleoperating || !armConfig.leaderPort || !armConfig.followerPort || !leaderType || !followerType || !leaderId || !followerId || backendConnected === false}
                 className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PlayIcon className="h-4 w-4 mr-2" />

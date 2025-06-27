@@ -1,6 +1,8 @@
+import React from 'react';
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import ArmConfiguration from './ArmConfiguration';
 import * as store from '../store/lerobotStore';
 
@@ -8,7 +10,6 @@ vi.mock('../store/lerobotStore');
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 describe('ArmConfiguration Page', () => {
   const mockStore = {
@@ -176,7 +177,7 @@ describe('ArmConfiguration Page', () => {
       render(<ArmConfiguration />);
       const robotTypeSelects = screen.getAllByRole('combobox');
       const leaderRobotTypeSelect = robotTypeSelects[1]; // First combobox is port, second is robot type
-      fireEvent.change(leaderRobotTypeSelect, { target: { value: 'so100' } });
+      fireEvent.change(leaderRobotTypeSelect, { target: { value: 'so100_leader' } });
       expect(mockStore.setArmConfig).toHaveBeenCalledWith({ leaderRobotType: 'so100_leader' });
     });
 
@@ -199,8 +200,8 @@ describe('ArmConfiguration Page', () => {
       const options = Array.from(leaderRobotTypeSelect.querySelectorAll('option'));
       const optionValues = options.map(option => option.value);
       
-      expect(optionValues).toContain('so100');
-      expect(optionValues).toContain('giraffe');
+      expect(optionValues).toContain('so100_leader');
+      expect(optionValues).toContain('giraffe_leader');
     });
 
     it('calls scanUsbPorts when scan button is clicked', async () => {

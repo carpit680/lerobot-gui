@@ -59,9 +59,6 @@ export default function Calibration() {
   const robotType = selectedArm === 'leader' ? armConfig.leaderRobotType : armConfig.followerRobotType
   const robotId = selectedArm === 'leader' ? armConfig.leaderRobotId : armConfig.followerRobotId
   
-  // Extract base robot type (remove _leader or _follower suffix)
-  const baseRobotType = robotType.replace('_leader', '').replace('_follower', '')
-  
   // LeRobot supported robots and their calibration steps
   const robotTypes: RobotType[] = [
     {
@@ -128,14 +125,14 @@ export default function Calibration() {
     }
   ]
 
-  const selectedRobotType = robotTypes.find(robot => robot.id === baseRobotType)
+  const selectedRobotType = robotTypes.find(robot => robot.id === robotType)
 
   // Initialize calibration steps when robot type changes
   useEffect(() => {
     if (selectedRobotType) {
       setCalibrationSteps([...selectedRobotType.calibrationSteps])
     }
-  }, [baseRobotType])
+  }, [robotType])
 
   // Check backend connection on component mount
   useEffect(() => {
@@ -193,7 +190,7 @@ export default function Calibration() {
     }
 
     if (!selectedRobotType) {
-      toast.error(`Robot type "${baseRobotType}" is not supported. Please configure a supported robot type in Arm Configuration`)
+      toast.error(`Robot type "${robotType}" is not supported. Please configure a supported robot type in Arm Configuration`)
       return
     }
 
@@ -728,7 +725,7 @@ export default function Calibration() {
                 Robot Type
               </label>
               <div className="input-field bg-gray-50 text-gray-700">
-                {robotType ? robotType.replace('_leader', '').replace('_follower', '') : 'Not configured'}
+                {robotType}
               </div>
               <p className="text-sm text-gray-600 mt-1">
                 From Arm Configuration
@@ -741,7 +738,7 @@ export default function Calibration() {
                 Robot ID
               </label>
               <div className="input-field bg-gray-50 text-gray-700">
-                {robotId || 'Not configured'}
+                {robotId}
               </div>
               <p className="text-sm text-gray-600 mt-1">
                 From Arm Configuration

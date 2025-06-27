@@ -14,8 +14,10 @@ interface UsbPort {
 }
 
 const robotTypes = [
-  { value: 'so100', label: 'SO-100' },
-  { value: 'giraffe', label: 'Giraffe v1.1' },
+  { value: 'so100_leader', label: 'SO-100 Leader' },
+  { value: 'so100_follower', label: 'SO-100 Follower' },
+  { value: 'giraffe_leader', label: 'Giraffe v1.1 Leader' },
+  { value: 'giraffe_follower', label: 'Giraffe v1.1 Follower' },
 ]
 
 export default function ArmConfiguration() {
@@ -489,15 +491,13 @@ export default function ArmConfiguration() {
                       Robot Type
                     </label>
                     <select
-                      value={armConfig.leaderRobotType.replace('_leader', '')}
-                      onChange={(e) => handleRobotTypeChange('leader', e.target.value)}
+                      value={armConfig.leaderRobotType}
+                      onChange={(e) => setArmConfig({ leaderRobotType: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       <option value="">Select robot type</option>
-                      {robotTypes.map((type) => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
+                      {robotTypes.filter(type => type.value.endsWith('_leader')).map((type) => (
+                        <option key={type.value} value={type.value}>{type.value}</option>
                       ))}
                     </select>
                   </div>
@@ -561,15 +561,13 @@ export default function ArmConfiguration() {
                       Robot Type
                     </label>
                     <select
-                      value={armConfig.followerRobotType.replace('_follower', '')}
-                      onChange={(e) => handleRobotTypeChange('follower', e.target.value)}
+                      value={armConfig.followerRobotType}
+                      onChange={(e) => setArmConfig({ followerRobotType: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       <option value="">Select robot type</option>
-                      {robotTypes.map((type) => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
+                      {robotTypes.filter(type => type.value.endsWith('_follower')).map((type) => (
+                        <option key={type.value} value={type.value}>{type.value}</option>
                       ))}
                     </select>
                   </div>
