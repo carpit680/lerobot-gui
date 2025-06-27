@@ -43,11 +43,9 @@ export default function Calibration() {
   const [isCalibrating, setIsCalibrating] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [selectedArm, setSelectedArm] = useState<'leader' | 'follower'>('leader')
-  const [selectedRobot, setSelectedRobot] = useState<string>('so100')
   const [calibrationOutput, setCalibrationOutput] = useState<string>('')
   const [isRunning, setIsRunning] = useState(false)
   const [waitingForUser, setWaitingForUser] = useState(false)
-  const [robotId, setRobotId] = useState<string>('')
   const [sessionId, setSessionId] = useState<string>('')
   const [websocket, setWebsocket] = useState<WebSocket | null>(null)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
@@ -55,6 +53,14 @@ export default function Calibration() {
   const [calibrationSteps, setCalibrationSteps] = useState<CalibrationStep[]>([])
   const [isCancelled, setIsCancelled] = useState(false)
   const monitoringIntervalRef = useRef<number | null>(null)
+  
+  // Get robot type and ID from store based on selected arm
+  const currentPort = selectedArm === 'leader' ? armConfig.leaderPort : armConfig.followerPort
+  const robotType = selectedArm === 'leader' ? armConfig.leaderRobotType : armConfig.followerRobotType
+  const robotId = selectedArm === 'leader' ? armConfig.leaderRobotId : armConfig.followerRobotId
+  
+  // Extract base robot type (remove _leader or _follower suffix)
+  const baseRobotType = robotType.replace('_leader', '').replace('_follower', '')
   
   // LeRobot supported robots and their calibration steps
   const robotTypes: RobotType[] = [
@@ -122,16 +128,14 @@ export default function Calibration() {
     }
   ]
 
-  const selectedRobotType = robotTypes.find(robot => robot.id === selectedRobot)
-  const currentPort = selectedArm === 'leader' ? armConfig.leaderPort : armConfig.followerPort
-  const robotType = selectedArm === 'leader' ? `${selectedRobot}_leader` : `${selectedRobot}_follower`
+  const selectedRobotType = robotTypes.find(robot => robot.id === baseRobotType)
 
   // Initialize calibration steps when robot type changes
   useEffect(() => {
     if (selectedRobotType) {
       setCalibrationSteps([...selectedRobotType.calibrationSteps])
     }
-  }, [selectedRobot])
+  }, [baseRobotType])
 
   // Check backend connection on component mount
   useEffect(() => {
@@ -178,13 +182,18 @@ export default function Calibration() {
       return
     }
 
-    if (!selectedRobotType) {
-      toast.error('Please select a robot type')
+    if (!robotType) {
+      toast.error(`Please configure ${selectedArm} arm robot type in Arm Configuration`)
       return
     }
 
-    if (!robotId.trim()) {
-      toast.error('Please provide a unique robot ID')
+    if (!robotId) {
+      toast.error(`Please configure ${selectedArm} arm robot ID in Arm Configuration`)
+      return
+    }
+
+    if (!selectedRobotType) {
+      toast.error(`Robot type "${baseRobotType}" is not supported. Please configure a supported robot type in Arm Configuration`)
       return
     }
 
@@ -713,43 +722,29 @@ export default function Calibration() {
               </p>
             </div>
 
-            {/* Robot Type Selection */}
+            {/* Robot Type Display */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Robot Type
               </label>
-              <select
-                value={selectedRobot}
-                onChange={(e) => setSelectedRobot(e.target.value)}
-                className="input-field"
-                disabled={isCalibrating}
-              >
-                {robotTypes.map(robot => (
-                  <option key={robot.id} value={robot.id}>
-                    {robot.name} - {robot.description}
-                  </option>
-                ))}
-              </select>
+              <div className="input-field bg-gray-50 text-gray-700">
+                {robotType ? robotType.replace('_leader', '').replace('_follower', '') : 'Not configured'}
+              </div>
               <p className="text-sm text-gray-600 mt-1">
-                Type: {robotType}
+                From Arm Configuration
               </p>
             </div>
 
-            {/* Robot ID */}
+            {/* Robot ID Display */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Robot ID
               </label>
-              <input
-                type="text"
-                value={robotId}
-                onChange={(e) => setRobotId(e.target.value)}
-                placeholder="e.g., my_awesome_leader_arm"
-                className="input-field"
-                disabled={isCalibrating}
-              />
+              <div className="input-field bg-gray-50 text-gray-700">
+                {robotId || 'Not configured'}
+              </div>
               <p className="text-sm text-gray-600 mt-1">
-                Give your robot a unique name
+                From Arm Configuration
               </p>
             </div>
           </div>
@@ -846,7 +841,7 @@ export default function Calibration() {
           <div className="mt-6 flex gap-4">
             <button
               onClick={startCalibration}
-              disabled={isCalibrating || !currentPort || !robotId.trim() || backendConnected === false}
+              disabled={isCalibrating || !currentPort || !robotType || !robotId || backendConnected === false}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isCalibrating ? (
