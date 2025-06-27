@@ -59,6 +59,9 @@ export default function Calibration() {
   const robotType = selectedArm === 'leader' ? armConfig.leaderRobotType : armConfig.followerRobotType
   const robotId = selectedArm === 'leader' ? armConfig.leaderRobotId : armConfig.followerRobotId
   
+  // Extract base robot type (remove _leader or _follower suffix)
+  const baseRobotType = robotType.replace('_leader', '').replace('_follower', '')
+
   // LeRobot supported robots and their calibration steps
   const robotTypes: RobotType[] = [
     {
@@ -125,7 +128,7 @@ export default function Calibration() {
     }
   ]
 
-  const selectedRobotType = robotTypes.find(robot => robot.id === robotType)
+  const selectedRobotType = robotTypes.find(robot => robot.id === baseRobotType)
 
   // Initialize calibration steps when robot type changes
   useEffect(() => {
@@ -190,7 +193,7 @@ export default function Calibration() {
     }
 
     if (!selectedRobotType) {
-      toast.error(`Robot type "${robotType}" is not supported. Please configure a supported robot type in Arm Configuration`)
+      toast.error(`Robot type "${baseRobotType}" is not supported. Please configure a supported robot type in Arm Configuration`)
       return
     }
 
@@ -886,24 +889,6 @@ export default function Calibration() {
                 Cancel Calibration
               </button>
             )}
-          </div>
-        </div>
-      </div>
-
-      {/* Calibration Tips */}
-      <div className="mt-8">
-        <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Calibration Tips</h3>
-          <div className="space-y-3 text-sm text-gray-600">
-            <p>• Ensure your robot arm is in a safe position before starting</p>
-            <p>• Keep the workspace clear during calibration</p>
-            <p>• Each step requires you to click "Continue" button to proceed</p>
-            <p>• Verify arm connections are stable</p>
-            <p>• Check that no external forces are applied to the arms</p>
-            <p>• Make sure LeRobot is properly installed and configured</p>
-            <p>• The calibration process will guide you through each step</p>
-            <p>• Calibration files will be saved automatically to the cache directory</p>
-            <p>• Refer to <a href="https://huggingface.co/docs/lerobot/index" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">LeRobot documentation</a> for detailed instructions</p>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useLeRobotStore } from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 import {
@@ -21,6 +22,7 @@ const robotTypes = [
 ]
 
 export default function ArmConfiguration() {
+  const location = useLocation()
   const { armConfig, setArmConfig, cameras, setCameras, toggleCamera, hfUser, setHfUser, hfToken, setHfToken } = useLeRobotStore()
   const [usbPorts, setUsbPorts] = useState<UsbPort[]>([])
   const [isScanning, setIsScanning] = useState(false)
@@ -45,6 +47,8 @@ export default function ArmConfiguration() {
   const [followerRobotIdInput, setFollowerRobotIdInput] = useState(armConfig.followerRobotId)
   const leaderRobotIdTimeoutRef = useRef<number | null>(null)
   const followerRobotIdTimeoutRef = useRef<number | null>(null)
+  const isOnArmConfigPage = useRef(true)
+  const streamingCamerasRef = useRef(streamingCameras)
 
   useEffect(() => {
     setCameraList(cameras)
@@ -197,7 +201,8 @@ export default function ArmConfiguration() {
   }
 
   const stopAllCameraStreams = async () => {
-    const promises = Array.from(streamingCameras).map(async (cameraId) => {
+    const cameras = Array.from(streamingCamerasRef.current)
+    const promises = cameras.map(async (cameraId) => {
       const cameraIndex = cameraId.replace('camera', '')
       try {
         await fetch(`http://localhost:8000/camera/${cameraIndex}/stop`, { method: 'DELETE' })
@@ -389,6 +394,44 @@ export default function ArmConfiguration() {
   useEffect(() => {
     setFollowerRobotIdInput(armConfig.followerRobotId)
   }, [armConfig.followerRobotId])
+
+  // Stop camera streams when navigating away from this page
+  useEffect(() => {
+    console.log('Arm Configuration component mounted')
+    
+    const handleBeforeUnload = () => {
+      console.log('Page unload detected, stopping camera streams')
+      stopAllCameraStreams()
+    }
+
+    // Add event listener for page unload
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    // Cleanup function that runs when component unmounts
+    return () => {
+      console.log('Arm Configuration component unmounting, stopping camera streams')
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      stopAllCameraStreams()
+    }
+  }, [])
+
+  // Track when we're on the arm configuration page
+  useEffect(() => {
+    isOnArmConfigPage.current = true
+    return () => {
+      isOnArmConfigPage.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    streamingCamerasRef.current = streamingCameras
+  }, [streamingCameras])
+
+  useEffect(() => {
+    if (location.pathname !== '/arm-configuration') {
+      stopAllCameraStreams()
+    }
+  }, [location.pathname])
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
