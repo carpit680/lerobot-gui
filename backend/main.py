@@ -110,6 +110,7 @@ class TrainingStatusResponse(BaseModel):
     error: Optional[str] = None
     output: List[str]
     start_time: Optional[str] = None
+    wandb_link: Optional[str] = None
 
 @app.get("/")
 async def root():
@@ -1025,7 +1026,7 @@ async def start_training(request: TrainingConfigRequest):
             job_name=request.config["job_name"],
             policy_device=request.config["policy_device"],
             wandb_enable=request.config["wandb_enable"],
-            policy_repo_id=request.config["policy_repo_id"]
+            resume=request.config.get("resume", False)
         )
         
         result = training_service.start_training(config, request.token)

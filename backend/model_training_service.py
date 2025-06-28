@@ -8,6 +8,7 @@ import asyncio
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from datetime import datetime
+import re
 
 @dataclass
 class TrainingConfig:
@@ -17,7 +18,7 @@ class TrainingConfig:
     job_name: str
     policy_device: str
     wandb_enable: bool
-    policy_repo_id: str
+    resume: bool
 
 class ModelTrainingService:
     def __init__(self):
@@ -51,8 +52,13 @@ class ModelTrainingService:
                 f"--job_name={config.job_name}",
                 f"--policy.device={config.policy_device}",
                 f"--wandb.enable={'true' if config.wandb_enable else 'false'}",
-                f"--policy.repo_id={config.policy_repo_id}"
+                f"--resume={'true' if config.resume else 'false'}"
             ]
+
+            # If resuming, add checkpoint path
+            if config.resume:
+                checkpoint_path = os.path.join(config.output_dir, "checkpoints/last/pretrained_model")
+                cmd.append(f"--policy.checkpoint_path={checkpoint_path}")
 
             # Set environment variables
             env = os.environ.copy()
@@ -117,12 +123,22 @@ class ModelTrainingService:
             "is_completed": self.is_completed,
             "error": self.error_message,
             "output": self.output_buffer.copy(),
-            "start_time": self.start_time.isoformat() if self.start_time else None
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "wandb_link": self._extract_wandb_link()
         }
 
     def clear_output(self):
         """Clear the output buffer"""
         self.output_buffer = []
+
+    def _extract_wandb_link(self) -> Optional[str]:
+        """Extract W&B link from the output buffer"""
+        for line in self.output_buffer:
+            # Look for any line containing a W&B URL
+            match = re.search(r'(https://wandb\.ai/[^\s]+)', line)
+            if match:
+                return match.group(1)
+        return None
 
     def _monitor_output(self):
         """Monitor the training process output"""

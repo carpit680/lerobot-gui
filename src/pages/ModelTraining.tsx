@@ -35,7 +35,7 @@ interface TrainingConfig {
   job_name: string
   policy_device: string
   wandb_enable: boolean
-  policy_repo_id: string
+  resume: boolean
 }
 
 interface TrainingStatus {
@@ -43,6 +43,7 @@ interface TrainingStatus {
   isCompleted: boolean
   error: string | null
   output: string[]
+  wandbLink: string | null
 }
 
 interface Dataset {
@@ -62,13 +63,14 @@ export default function ModelTraining() {
     job_name: '',
     policy_device: 'cuda',
     wandb_enable: true,
-    policy_repo_id: ''
+    resume: false,
   })
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>({
     isRunning: false,
     isCompleted: false,
     error: null,
-    output: []
+    output: [],
+    wandbLink: null
   })
   const [datasets, setDatasets] = useState<Dataset[]>([])
   const [loadingDatasets, setLoadingDatasets] = useState(false)
@@ -95,7 +97,6 @@ export default function ModelTraining() {
         dataset_repo_id: datasetRepoId,
         output_dir: outputDir,
         job_name: jobName,
-        policy_repo_id: policyRepoId
       }))
     }
   }, [hfUser, selectedDataset, policyRepoName])
@@ -151,7 +152,7 @@ export default function ModelTraining() {
     }
   }
 
-  const handleConfigChange = (field: keyof TrainingConfig, value: string | boolean) => {
+  const handleConfigChange = (field: keyof TrainingConfig, value: string | boolean | number) => {
     setConfig(prev => ({ ...prev, [field]: value }))
   }
 
@@ -160,7 +161,8 @@ export default function ModelTraining() {
       isRunning: true,
       isCompleted: false,
       error: null,
-      output: []
+      output: [],
+      wandbLink: null
     })
 
     try {
@@ -191,6 +193,26 @@ export default function ModelTraining() {
     }
   }
 
+  const clearOutput = () => {
+    setTrainingStatus(prev => ({
+      ...prev,
+      output: [],
+      wandbLink: null
+    }))
+  }
+
+  // Extract W&B link from training output
+  const extractWandbLink = (output: string[]): string | null => {
+    for (const line of output) {
+      // Look for any line containing a W&B URL
+      const match = line.match(/(https:\/\/wandb\.ai\/[^\s]+)/)
+      if (match) {
+        return match[1]
+      }
+    }
+    return null
+  }
+
   const pollTrainingOutput = async () => {
     const pollInterval = setInterval(async () => {
       try {
@@ -198,11 +220,13 @@ export default function ModelTraining() {
         const data = await response.json()
 
         if (data.is_completed) {
+          const newOutput = data.output || trainingStatus.output
           setTrainingStatus(prev => ({
             ...prev,
             isRunning: false,
             isCompleted: true,
-            output: data.output || prev.output
+            output: newOutput,
+            wandbLink: extractWandbLink(newOutput)
           }))
           clearInterval(pollInterval)
         } else if (data.error) {
@@ -213,9 +237,11 @@ export default function ModelTraining() {
           }))
           clearInterval(pollInterval)
         } else {
+          const newOutput = data.output || trainingStatus.output
           setTrainingStatus(prev => ({
             ...prev,
-            output: data.output || prev.output
+            output: newOutput,
+            wandbLink: extractWandbLink(newOutput)
           }))
         }
       } catch (err) {
@@ -246,13 +272,6 @@ export default function ModelTraining() {
     } catch (err) {
       console.error('Error stopping training:', err)
     }
-  }
-
-  const clearOutput = () => {
-    setTrainingStatus(prev => ({
-      ...prev,
-      output: []
-    }))
   }
 
   if (!hfUser) {
@@ -360,7 +379,7 @@ export default function ModelTraining() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Full path: {config.policy_repo_id}
+                Full path: {`${hfUser}/${policyRepoName}`}
               </p>
                 </div>
 
@@ -391,12 +410,25 @@ export default function ModelTraining() {
               </label>
                         </div>
 
+            <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="resume"
+                    checked={config.resume}
+                    onChange={(e) => handleConfigChange('resume', e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="resume" className="ml-2 block text-sm text-gray-700">
+                Resume from checkpoint (continue training if output directory exists)
+                  </label>
+                </div>
+
             {/* Configuration Summary */}
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="text-sm font-medium text-gray-900 mb-2">Configuration Summary</h3>
               <div className="space-y-1 text-sm text-gray-600">
                 <div><span className="font-medium">Dataset:</span> {config.dataset_repo_id}</div>
-                <div><span className="font-medium">Policy:</span> {config.policy_repo_id}</div>
+                <div><span className="font-medium">Policy:</span> {`${hfUser}/${policyRepoName}`}</div>
                 <div><span className="font-medium">Output:</span> {config.output_dir}</div>
                 <div><span className="font-medium">Job:</span> {config.job_name}</div>
               </div>
@@ -427,12 +459,27 @@ export default function ModelTraining() {
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">Training Output</h2>
+              <div className="flex items-center gap-2">
+                {trainingStatus.wandbLink && (
+                  <a
+                    href={trainingStatus.wandbLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                    View in W&B
+                  </a>
+                )}
               <button
                 onClick={clearOutput}
                 className="text-sm text-gray-500 hover:text-gray-700"
               >
                 Clear
               </button>
+              </div>
                   </div>
                   </div>
           <div className="p-6">
@@ -466,6 +513,21 @@ export default function ModelTraining() {
                     <h3 className="text-sm font-medium text-green-800">Training Completed</h3>
                     <div className="mt-2 text-sm text-green-700">
                       <p>Training has finished successfully.</p>
+                      {trainingStatus.wandbLink && config.wandb_enable && (
+                        <div className="mt-2">
+                          <a
+                            href={trainingStatus.wandbLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center text-purple-600 hover:text-purple-700 font-medium"
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                            View training metrics in Weights & Biases
+                          </a>
+                        </div>
+                      )}
                 </div>
                   </div>
                 </div>

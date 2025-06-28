@@ -15,8 +15,7 @@ def sample_config():
         output_dir="outputs/train/test",
         job_name="test_job",
         policy_device="cuda",
-        wandb_enable=True,
-        policy_repo_id="test_user/test_policy"
+        wandb_enable=True
     )
 
 def test_training_service_initialization(training_service):
