@@ -1,15 +1,17 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import json
 import asyncio
 import logging
-from backend import teleoperation_service
+from backend.calibration_service import calibration_service as calibration_service_instance
+from backend.dataset_recording_service import dataset_recording_service as dataset_recording_service_instance
+from backend.dataset_replay_service import dataset_replay_service as dataset_replay_service_instance
+from backend.dataset_visualization_service import dataset_visualization_service as dataset_visualization_service_instance
 from backend.motor_setup_service import MotorSetupService
-from backend.dataset_recording_service import dataset_recording_service
-from backend.dataset_replay_service import dataset_replay_service
-from backend.dataset_visualization_service import dataset_visualization_service
+from backend.teleoperation_service import teleoperation_service as teleoperation_service_instance
+from backend.model_training_service import training_service, TrainingConfig
 import cv2
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import Response
@@ -17,10 +19,6 @@ import time
 import subprocess
 import sys
 import os
-
-from backend.calibration_service import calibration_service as calibration_service_instance
-
-motor_setup_service = MotorSetupService()
 
 # Global camera stream tracking
 active_camera_streams = {}
@@ -38,6 +36,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize services
+motor_setup_service = MotorSetupService()
 
 class CalibrationRequest(BaseModel):
     arm_type: str  # 'leader' or 'follower'
@@ -98,6 +99,17 @@ class DatasetVisualizationRequest(BaseModel):
 class DatasetDetailsRequest(BaseModel):
     dataset_id: str
     token: Optional[str] = None
+
+class TrainingConfigRequest(BaseModel):
+    config: dict
+    token: Optional[str] = None
+
+class TrainingStatusResponse(BaseModel):
+    is_running: bool
+    is_completed: bool
+    error: Optional[str] = None
+    output: List[str]
+    start_time: Optional[str] = None
 
 @app.get("/")
 async def root():
@@ -401,7 +413,7 @@ async def websocket_calibration(websocket: WebSocket, session_id: str):
 @app.post("/teleop/start")
 async def start_teleoperation(request: TeleoperationRequest):
     try:
-        session_id = await teleoperation_service.teleoperation_service.start_teleoperation(
+        session_id = await teleoperation_service_instance.start_teleoperation(
             leader_type=request.leader_type,
             leader_port=request.leader_port,
             leader_id=request.leader_id,
@@ -421,7 +433,7 @@ async def start_teleoperation(request: TeleoperationRequest):
 @app.get("/teleop/status/{session_id}")
 async def get_teleoperation_status(session_id: str):
     try:
-        is_running = await teleoperation_service.teleoperation_service.is_running(session_id)
+        is_running = await teleoperation_service_instance.is_running(session_id)
         return {
             "session_id": session_id,
             "is_running": is_running,
@@ -433,7 +445,7 @@ async def get_teleoperation_status(session_id: str):
 @app.delete("/teleop/stop/{session_id}")
 async def stop_teleoperation(session_id: str):
     try:
-        success = await teleoperation_service.teleoperation_service.stop_teleoperation(session_id)
+        success = await teleoperation_service_instance.stop_teleoperation(session_id)
         return {
             "success": success,
             "message": "Teleoperation stopped successfully" if success else "Failed to stop teleoperation"
@@ -454,7 +466,7 @@ async def websocket_teleoperation(websocket: WebSocket, session_id: str):
         await websocket.send_text(json.dumps(initial_message))
         message_count += 1
         while True:
-            is_running = await teleoperation_service.teleoperation_service.is_running(session_id)
+            is_running = await teleoperation_service_instance.is_running(session_id)
             if not is_running:
                 try:
                     await websocket.send_text(json.dumps({
@@ -466,7 +478,7 @@ async def websocket_teleoperation(websocket: WebSocket, session_id: str):
                 break
             
             # Get regular outputs (non-table)
-            outputs = await teleoperation_service.teleoperation_service.get_all_output(session_id)
+            outputs = await teleoperation_service_instance.get_all_output(session_id)
             if outputs:
                 for output in outputs:
                     message_count += 1
@@ -479,7 +491,7 @@ async def websocket_teleoperation(websocket: WebSocket, session_id: str):
                         break
             
             # Get latest table data
-            latest_table = await teleoperation_service.teleoperation_service.get_latest_table(session_id)
+            latest_table = await teleoperation_service_instance.get_latest_table(session_id)
             if latest_table and latest_table != last_table_sent:
                 try:
                     await websocket.send_text(json.dumps({
@@ -700,7 +712,7 @@ async def start_dataset_recording(request: DatasetRecordingRequest):
     Start a dataset recording process and return a session ID
     """
     try:
-        session_id = await dataset_recording_service.start_dataset_recording(
+        session_id = await dataset_recording_service_instance.start_dataset_recording(
             robot_type=request.robot_type,
             robot_port=request.robot_port,
             robot_id=request.robot_id,
@@ -733,7 +745,7 @@ async def get_dataset_recording_status(session_id: str):
     Get the status of a dataset recording process
     """
     try:
-        is_running = await dataset_recording_service.is_running(session_id)
+        is_running = await dataset_recording_service_instance.is_running(session_id)
         
         return {
             "session_id": session_id,
@@ -750,7 +762,7 @@ async def stop_dataset_recording(session_id: str):
     Stop a dataset recording process
     """
     try:
-        success = await dataset_recording_service.stop_dataset_recording(session_id)
+        success = await dataset_recording_service_instance.stop_dataset_recording(session_id)
         
         return {
             "success": success,
@@ -776,7 +788,7 @@ async def websocket_dataset_recording(websocket: WebSocket, session_id: str):
         
         while True:
             # Check if process is still running
-            is_running = await dataset_recording_service.is_running(session_id)
+            is_running = await dataset_recording_service_instance.is_running(session_id)
             
             if not is_running:
                 # Process has finished
@@ -787,7 +799,7 @@ async def websocket_dataset_recording(websocket: WebSocket, session_id: str):
                 break
             
             # Get all available output messages at once
-            outputs = await dataset_recording_service.get_all_output(session_id)
+            outputs = await dataset_recording_service_instance.get_all_output(session_id)
             if outputs:
                 for output in outputs:
                     try:
@@ -824,7 +836,7 @@ async def start_dataset_replay(request: DatasetReplayRequest):
     Start a dataset replay process and return a session ID
     """
     try:
-        session_id = await dataset_replay_service.start_dataset_replay(
+        session_id = await dataset_replay_service_instance.start_dataset_replay(
             robot_type=request.robot_type,
             robot_port=request.robot_port,
             robot_id=request.robot_id,
@@ -847,7 +859,7 @@ async def get_dataset_replay_status(session_id: str):
     Get the status of a dataset replay process
     """
     try:
-        is_running = await dataset_replay_service.is_running(session_id)
+        is_running = await dataset_replay_service_instance.is_running(session_id)
         
         return {
             "session_id": session_id,
@@ -864,7 +876,7 @@ async def stop_dataset_replay(session_id: str):
     Stop a dataset replay process
     """
     try:
-        success = await dataset_replay_service.stop_dataset_replay(session_id)
+        success = await dataset_replay_service_instance.stop_dataset_replay(session_id)
         
         return {
             "success": success,
@@ -890,7 +902,7 @@ async def websocket_dataset_replay(websocket: WebSocket, session_id: str):
         
         while True:
             # Check if process is still running
-            is_running = await dataset_replay_service.is_running(session_id)
+            is_running = await dataset_replay_service_instance.is_running(session_id)
             
             if not is_running:
                 # Process has finished
@@ -901,7 +913,7 @@ async def websocket_dataset_replay(websocket: WebSocket, session_id: str):
                 break
             
             # Get all available output messages at once
-            outputs = await dataset_replay_service.get_all_output(session_id)
+            outputs = await dataset_replay_service_instance.get_all_output(session_id)
             if outputs:
                 for output in outputs:
                     try:
@@ -939,13 +951,13 @@ async def fetch_user_datasets(request: DatasetVisualizationRequest):
     """
     try:
         if request.search_query:
-            datasets = await dataset_visualization_service.search_datasets(
+            datasets = await dataset_visualization_service_instance.search_datasets(
                 query=request.search_query,
                 username=request.username,
                 token=request.token
             )
         else:
-            datasets = await dataset_visualization_service.get_user_datasets(
+            datasets = await dataset_visualization_service_instance.get_user_datasets(
                 username=request.username,
                 token=request.token
             )
@@ -966,7 +978,7 @@ async def get_dataset_details(request: DatasetDetailsRequest):
     Fetch detailed information about a specific dataset
     """
     try:
-        dataset_details = await dataset_visualization_service.get_dataset_details(
+        dataset_details = await dataset_visualization_service_instance.get_dataset_details(
             dataset_id=request.dataset_id,
             token=request.token
         )
@@ -1001,6 +1013,57 @@ async def get_huggingface_env():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get environment variables: {str(e)}")
+
+@app.post("/model-training/start")
+async def start_training(request: TrainingConfigRequest):
+    try:
+        # Convert dict to TrainingConfig
+        config = TrainingConfig(
+            dataset_repo_id=request.config["dataset_repo_id"],
+            policy_type=request.config["policy_type"],
+            output_dir=request.config["output_dir"],
+            job_name=request.config["job_name"],
+            policy_device=request.config["policy_device"],
+            wandb_enable=request.config["wandb_enable"],
+            policy_repo_id=request.config["policy_repo_id"]
+        )
+        
+        result = training_service.start_training(config, request.token)
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return {"message": result["message"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/model-training/stop")
+async def stop_training():
+    try:
+        result = training_service.stop_training()
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return {"message": result["message"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/model-training/status", response_model=TrainingStatusResponse)
+async def get_training_status():
+    try:
+        status = training_service.get_status()
+        return TrainingStatusResponse(**status)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/model-training/clear")
+async def clear_training_output():
+    try:
+        training_service.clear_output()
+        return {"message": "Output cleared successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

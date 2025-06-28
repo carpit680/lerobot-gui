@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLeRobotStore } from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 import {
@@ -28,427 +28,461 @@ interface TrainingProgress {
   eta: string
 }
 
+interface TrainingConfig {
+  dataset_repo_id: string
+  policy_type: string
+  output_dir: string
+  job_name: string
+  policy_device: string
+  wandb_enable: boolean
+  policy_repo_id: string
+}
+
+interface TrainingStatus {
+  isRunning: boolean
+  isCompleted: boolean
+  error: string | null
+  output: string[]
+}
+
+interface Dataset {
+  id: string
+  name: string
+  author: string
+  description: string
+  tags: string[]
+}
+
 export default function ModelTraining() {
-  const { datasets, trainingConfig, setTrainingConfig, isTraining, setTraining } = useLeRobotStore()
-  const [selectedDatasets, setSelectedDatasets] = useState<string[]>([])
-  const [trainingProgress, setTrainingProgress] = useState<TrainingProgress | null>(null)
-  const [trainingMetrics, setTrainingMetrics] = useState<TrainingMetrics[]>([])
-  const [isPaused, setIsPaused] = useState(false)
+  const { hfUser, hfToken } = useLeRobotStore()
+  const [config, setConfig] = useState<TrainingConfig>({
+    dataset_repo_id: '',
+    policy_type: 'act',
+    output_dir: '',
+    job_name: '',
+    policy_device: 'cuda',
+    wandb_enable: true,
+    policy_repo_id: ''
+  })
+  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>({
+    isRunning: false,
+    isCompleted: false,
+    error: null,
+    output: []
+  })
+  const [datasets, setDatasets] = useState<Dataset[]>([])
+  const [loadingDatasets, setLoadingDatasets] = useState(false)
+  const [selectedDataset, setSelectedDataset] = useState<string>('')
+  const [policyRepoName, setPolicyRepoName] = useState<string>('my_policy')
 
-  const modelTypes = [
-    { value: 'transformer', label: 'Transformer', description: 'Attention-based model for sequence learning' },
-    { value: 'lstm', label: 'LSTM', description: 'Long Short-Term Memory for temporal data' },
-    { value: 'cnn', label: 'CNN', description: 'Convolutional Neural Network for spatial features' },
-    { value: 'mlp', label: 'MLP', description: 'Multi-Layer Perceptron for simple mappings' },
-  ]
-
-  const startTraining = () => {
-    if (selectedDatasets.length === 0) {
-      toast.error('Please select at least one dataset for training')
-      return
-    }
-
-    if (!trainingConfig.datasetPath) {
-      toast.error('Please specify a dataset path')
-      return
-    }
-
-    setTraining(true)
-    setIsPaused(false)
-    setTrainingProgress({
-      currentEpoch: 0,
-      totalEpochs: trainingConfig.epochs,
-      currentStep: 0,
-      totalSteps: 100,
-      loss: 0,
-      accuracy: 0,
-      learningRate: trainingConfig.learningRate,
-      eta: '00:00:00'
-    })
-    setTrainingMetrics([])
-    toast.success('Training started')
-  }
-
-  const pauseTraining = () => {
-    setIsPaused(true)
-    toast.success('Training paused')
-  }
-
-  const resumeTraining = () => {
-    setIsPaused(false)
-    toast.success('Training resumed')
-  }
-
-  const stopTraining = () => {
-    setTraining(false)
-    setIsPaused(false)
-    setTrainingProgress(null)
-    toast.success('Training stopped')
-  }
-
-  // Simulate training progress
+  // Fetch LeRobot datasets when component mounts
   useEffect(() => {
-    if (isTraining && !isPaused && trainingProgress) {
-      const interval = setInterval(() => {
-        setTrainingProgress(prev => {
-          if (!prev) return prev
-
-          const newStep = prev.currentStep + 1
-          const newEpoch = Math.floor(newStep / prev.totalSteps)
-          
-          if (newEpoch >= prev.totalEpochs) {
-            setTraining(false)
-            setIsPaused(false)
-            toast.success('Training completed!')
-            return null
-          }
-
-          // Simulate metrics
-          const progress = newStep / (prev.totalSteps * prev.totalEpochs)
-          const loss = Math.max(0.1, 2 * Math.exp(-progress * 3) + Math.random() * 0.1)
-          const accuracy = Math.min(0.95, 0.3 + progress * 0.6 + Math.random() * 0.05)
-
-          // Add to metrics every epoch
-          if (newStep % prev.totalSteps === 0) {
-            setTrainingMetrics(prev => [...prev, {
-              epoch: newEpoch,
-              loss,
-              accuracy,
-              validationLoss: loss * (1 + Math.random() * 0.2),
-              validationAccuracy: accuracy * (0.9 + Math.random() * 0.1)
-            }])
-          }
-
-          return {
-            ...prev,
-            currentEpoch: newEpoch,
-            currentStep: newStep % prev.totalSteps,
-            loss,
-            accuracy,
-            eta: formatETA((prev.totalEpochs - newEpoch) * 30) // 30 seconds per epoch
-          }
-        })
-      }, 100)
-
-      return () => clearInterval(interval)
+    if (hfUser) {
+      fetchLeRobotDatasets()
     }
-  }, [isTraining, isPaused, trainingProgress])
+  }, [hfUser])
 
-  const toggleDataset = (datasetId: string) => {
-    setSelectedDatasets(prev => 
-      prev.includes(datasetId)
-        ? prev.filter(id => id !== datasetId)
-        : [...prev, datasetId]
+  // Update config when selections change
+  useEffect(() => {
+    if (hfUser) {
+      const datasetRepoId = selectedDataset || `${hfUser}/so101_test`
+      const policyRepoId = `${hfUser}/${policyRepoName}`
+      const jobName = `act_${policyRepoName}`
+      const outputDir = `outputs/train/act_${policyRepoName}`
+
+      setConfig(prev => ({
+        ...prev,
+        dataset_repo_id: datasetRepoId,
+        output_dir: outputDir,
+        job_name: jobName,
+        policy_repo_id: policyRepoId
+      }))
+    }
+  }, [hfUser, selectedDataset, policyRepoName])
+
+  const fetchLeRobotDatasets = async () => {
+    if (!hfUser) return
+
+    setLoadingDatasets(true)
+    try {
+      // Use Hugging Face API directly
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      
+      if (hfToken) {
+        headers['Authorization'] = `Bearer ${hfToken}`
+      }
+
+      const response = await fetch(`https://huggingface.co/api/datasets?author=${hfUser}&limit=100`, {
+        method: 'GET',
+        headers,
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('HF API Response:', data) // Debug log
+        
+        // Filter datasets that have LeRobot tag
+        const lerobotDatasets = data.filter((dataset: any) => 
+          dataset.tags && dataset.tags.includes('LeRobot')
+        ).map((dataset: any) => ({
+          id: dataset.id || dataset.full_name,
+          name: dataset.name || dataset.id?.split('/')?.[1] || 'Unknown',
+          author: dataset.author || dataset.id?.split('/')?.[0] || hfUser,
+          description: dataset.description || 'No description available',
+          tags: dataset.tags || []
+        }))
+        
+        console.log('Filtered LeRobot datasets:', lerobotDatasets) // Debug log
+        setDatasets(lerobotDatasets)
+        
+        // Set default selection if available
+        if (lerobotDatasets.length > 0) {
+          setSelectedDataset(lerobotDatasets[0].id)
+        }
+      } else {
+        console.error('Failed to fetch datasets from Hugging Face API:', response.status, response.statusText)
+      }
+    } catch (err) {
+      console.error('Error fetching datasets:', err)
+    } finally {
+      setLoadingDatasets(false)
+    }
+  }
+
+  const handleConfigChange = (field: keyof TrainingConfig, value: string | boolean) => {
+    setConfig(prev => ({ ...prev, [field]: value }))
+  }
+
+  const startTraining = async () => {
+    setTrainingStatus({
+      isRunning: true,
+      isCompleted: false,
+      error: null,
+      output: []
+    })
+
+    try {
+      const response = await fetch('http://localhost:8000/model-training/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          config,
+          token: hfToken || undefined,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to start training')
+      }
+
+      // Start polling for training output
+      pollTrainingOutput()
+    } catch (err) {
+      setTrainingStatus(prev => ({
+        ...prev,
+        isRunning: false,
+        error: err instanceof Error ? err.message : 'Failed to start training'
+      }))
+    }
+  }
+
+  const pollTrainingOutput = async () => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('http://localhost:8000/model-training/status')
+        const data = await response.json()
+
+        if (data.is_completed) {
+          setTrainingStatus(prev => ({
+            ...prev,
+            isRunning: false,
+            isCompleted: true,
+            output: data.output || prev.output
+          }))
+          clearInterval(pollInterval)
+        } else if (data.error) {
+          setTrainingStatus(prev => ({
+            ...prev,
+            isRunning: false,
+            error: data.error
+          }))
+          clearInterval(pollInterval)
+        } else {
+          setTrainingStatus(prev => ({
+            ...prev,
+            output: data.output || prev.output
+          }))
+        }
+      } catch (err) {
+        console.error('Error polling training status:', err)
+      }
+    }, 1000) // Poll every second
+
+    // Cleanup interval after 30 minutes (1800000 ms) to prevent infinite polling
+    setTimeout(() => {
+      clearInterval(pollInterval)
+      setTrainingStatus(prev => ({
+        ...prev,
+        isRunning: false,
+        error: 'Training polling timeout - check backend logs for status'
+      }))
+    }, 1800000)
+  }
+
+  const stopTraining = async () => {
+    try {
+      await fetch('http://localhost:8000/model-training/stop', {
+        method: 'POST',
+      })
+      setTrainingStatus(prev => ({
+        ...prev,
+        isRunning: false
+      }))
+    } catch (err) {
+      console.error('Error stopping training:', err)
+    }
+  }
+
+  const clearOutput = () => {
+    setTrainingStatus(prev => ({
+      ...prev,
+      output: []
+    }))
+  }
+
+  if (!hfUser) {
+    return (
+      <div className="p-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">
+                Hugging Face Username Required
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>
+                  Please configure your Hugging Face username in the Arm Configuration page to start model training.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     )
   }
 
-  const formatETA = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-
-  const formatProgress = (current: number, total: number) => {
-    return ((current / total) * 100).toFixed(1)
-  }
-
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 font-heading">Model Training</h1>
-        <p className="mt-2 text-gray-600">
-          Train machine learning models with your recorded datasets
+    <div className="p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Model Training</h1>
+        <p className="text-gray-600">
+          Configure and run LeRobot model training with your datasets
         </p>
+        <div className="mt-2 text-sm text-gray-500">
+          User: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{hfUser}</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Training Configuration */}
-        <div className="lg:col-span-1">
-          <div className="space-y-6">
-            {/* Model Configuration */}
-            <div className="card">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Model Configuration</h2>
-              
-              <div className="space-y-4">
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">Training Configuration</h2>
+          </div>
+          <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Model Type
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Dataset Repository
                   </label>
+              {loadingDatasets ? (
+                <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                    Loading datasets...
+                  </div>
+                </div>
+              ) : (
                   <select
-                    value={trainingConfig.modelType}
-                    onChange={(e) => setTrainingConfig({ modelType: e.target.value })}
-                    className="input-field"
-                  >
-                    {modelTypes.map(model => (
-                      <option key={model.value} value={model.value}>
-                        {model.label}
+                  value={selectedDataset}
+                  onChange={(e) => setSelectedDataset(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {datasets.length === 0 ? (
+                    <option value="">No LeRobot datasets found</option>
+                  ) : (
+                    datasets.map((dataset) => (
+                      <option key={dataset.id} value={dataset.id}>
+                        {dataset.name || dataset.id}
                       </option>
-                    ))}
+                    ))
+                  )}
                   </select>
+              )}
                   <p className="text-xs text-gray-500 mt-1">
-                    {modelTypes.find(m => m.value === trainingConfig.modelType)?.description}
+                Selected: {config.dataset_repo_id}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Learning Rate
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Policy Type
                   </label>
-                  <input
-                    type="number"
-                    value={trainingConfig.learningRate}
-                    onChange={(e) => setTrainingConfig({ learningRate: Number(e.target.value) })}
-                    step="0.0001"
-                    min="0.0001"
-                    max="1"
-                    className="input-field"
-                  />
+              <select
+                value={config.policy_type}
+                onChange={(e) => handleConfigChange('policy_type', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="act">ACT</option>
+                <option value="diffusion">Diffusion</option>
+                <option value="transformer">Transformer</option>
+              </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Batch Size
-                  </label>
-                  <input
-                    type="number"
-                    value={trainingConfig.batchSize}
-                    onChange={(e) => setTrainingConfig({ batchSize: Number(e.target.value) })}
-                    min="1"
-                    max="512"
-                    className="input-field"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Epochs
-                  </label>
-                  <input
-                    type="number"
-                    value={trainingConfig.epochs}
-                    onChange={(e) => setTrainingConfig({ epochs: Number(e.target.value) })}
-                    min="1"
-                    max="1000"
-                    className="input-field"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Dataset Path
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Policy Repository Name
                   </label>
                   <input
                     type="text"
-                    value={trainingConfig.datasetPath}
-                    onChange={(e) => setTrainingConfig({ datasetPath: e.target.value })}
-                    placeholder="/path/to/datasets"
-                    className="input-field"
-                  />
+                value={policyRepoName}
+                onChange={(e) => setPolicyRepoName(e.target.value)}
+                placeholder="my_policy"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Full path: {config.policy_repo_id}
+              </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Output Path
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Policy Device
                   </label>
-                  <input
-                    type="text"
-                    value={trainingConfig.outputPath}
-                    onChange={(e) => setTrainingConfig({ outputPath: e.target.value })}
-                    placeholder="./models"
-                    className="input-field"
-                  />
-                </div>
-              </div>
+              <select
+                value={config.policy_device}
+                onChange={(e) => handleConfigChange('policy_device', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="cuda">CUDA</option>
+                <option value="mps">Apple Silicon</option>
+              </select>
             </div>
 
-            {/* Dataset Selection */}
-            <div className="card">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Dataset Selection</h3>
-              
-              <div className="space-y-3">
-                {datasets.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">No datasets available</p>
-                ) : (
-                  datasets.map(dataset => (
-                    <label key={dataset.id} className="flex items-start">
+            <div className="flex items-center">
                       <input
                         type="checkbox"
-                        checked={selectedDatasets.includes(dataset.id)}
-                        onChange={() => toggleDataset(dataset.id)}
-                        disabled={isTraining}
-                        className="mt-1 mr-3"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">{dataset.name}</div>
-                        <div className="text-sm text-gray-600">
-                          {dataset.frameCount} frames • {Math.round(dataset.size / 1024 / 1024)} MB
+                id="wandb_enable"
+                checked={config.wandb_enable}
+                onChange={(e) => handleConfigChange('wandb_enable', e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="wandb_enable" className="ml-2 block text-sm text-gray-700">
+                Enable Weights & Biases logging
+              </label>
                         </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(dataset.createdAt).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </label>
-                  ))
-                )}
+
+            {/* Configuration Summary */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-900 mb-2">Configuration Summary</h3>
+              <div className="space-y-1 text-sm text-gray-600">
+                <div><span className="font-medium">Dataset:</span> {config.dataset_repo_id}</div>
+                <div><span className="font-medium">Policy:</span> {config.policy_repo_id}</div>
+                <div><span className="font-medium">Output:</span> {config.output_dir}</div>
+                <div><span className="font-medium">Job:</span> {config.job_name}</div>
               </div>
             </div>
 
-            {/* Training Controls */}
-            <div className="card">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Training Controls</h3>
-              
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  {!isTraining ? (
+            <div className="flex gap-3 pt-4">
                     <button
                       onClick={startTraining}
-                      disabled={selectedDatasets.length === 0}
-                      className="btn-primary flex-1 disabled:opacity-50"
+                disabled={trainingStatus.isRunning || datasets.length === 0}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <PlayIcon className="h-4 w-4 mr-2" />
-                      Start Training
+                {trainingStatus.isRunning ? 'Training...' : 'Start Training'}
                     </button>
-                  ) : (
-                    <>
-                      {!isPaused ? (
-                        <button
-                          onClick={pauseTraining}
-                          className="btn-secondary flex-1"
-                        >
-                          <PauseIcon className="h-4 w-4 mr-2" />
-                          Pause
-                        </button>
-                      ) : (
-                        <button
-                          onClick={resumeTraining}
-                          className="btn-primary flex-1"
-                        >
-                          <PlayIcon className="h-4 w-4 mr-2" />
-                          Resume
-                        </button>
-                      )}
+              {trainingStatus.isRunning && (
                       <button
                         onClick={stopTraining}
-                        className="btn-danger flex-1"
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                       >
-                        <StopIcon className="h-4 w-4 mr-2" />
                         Stop
                       </button>
-                    </>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Training Status */}
-            {trainingProgress && (
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Training Status</h3>
-                
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Status:</span>
-                    <span className={`text-sm font-medium ${
-                      isTraining && !isPaused ? 'text-green-600' :
-                      isPaused ? 'text-yellow-600' : 'text-gray-600'
-                    }`}>
-                      {isTraining && !isPaused ? 'Training' :
-                       isPaused ? 'Paused' : 'Stopped'}
-                    </span>
+        {/* Training Output */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Training Output</h2>
+              <button
+                onClick={clearOutput}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Clear
+              </button>
                   </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Epoch:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {trainingProgress.currentEpoch + 1} / {trainingProgress.totalEpochs}
-                    </span>
                   </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Progress:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {formatProgress(trainingProgress.currentEpoch * trainingProgress.totalSteps + trainingProgress.currentStep, 
-                                    trainingProgress.totalEpochs * trainingProgress.totalSteps)}%
-                    </span>
+          <div className="p-6">
+            {trainingStatus.error && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
                   </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Loss:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {trainingProgress.loss.toFixed(4)}
-                    </span>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-800">Training Error</h3>
+                    <div className="mt-2 text-sm text-red-700">
+                      <p>{trainingStatus.error}</p>
                   </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Accuracy:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {(trainingProgress.accuracy * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">ETA:</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {trainingProgress.eta}
-                    </span>
                   </div>
                 </div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Training Visualization */}
-        <div className="lg:col-span-2">
-          <div className="card">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Training Progress</h2>
-            
-            {trainingMetrics.length > 0 ? (
-              <div className="space-y-6">
-                {/* Loss Chart */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Training Loss</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={trainingMetrics}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="epoch" />
-                        <YAxis />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="loss" stroke="#ef4444" strokeWidth={2} name="Training Loss" />
-                        <Line type="monotone" dataKey="validationLoss" stroke="#f59e0b" strokeWidth={2} name="Validation Loss" />
-                      </LineChart>
-                    </ResponsiveContainer>
+            {trainingStatus.isCompleted && (
+              <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-green-800">Training Completed</h3>
+                    <div className="mt-2 text-sm text-green-700">
+                      <p>Training has finished successfully.</p>
+                </div>
                   </div>
                 </div>
-
-                {/* Accuracy Chart */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Training Accuracy</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={trainingMetrics}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="epoch" />
-                        <YAxis />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="accuracy" stroke="#10b981" strokeWidth={2} name="Training Accuracy" />
-                        <Line type="monotone" dataKey="validationAccuracy" stroke="#3b82f6" strokeWidth={2} name="Validation Accuracy" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <ChartBarIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Training Data</h3>
-                <p className="text-gray-600">
-                  Start training to see progress charts
-                </p>
               </div>
             )}
+
+            <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-96 overflow-y-auto">
+              {trainingStatus.output.length === 0 ? (
+                <div className="text-gray-500">
+                  Training output will appear here...
+                </div>
+              ) : (
+                trainingStatus.output.map((line, index) => (
+                  <div key={index} className="whitespace-pre-wrap">{line}</div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
