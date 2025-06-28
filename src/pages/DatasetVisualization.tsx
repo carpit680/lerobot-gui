@@ -243,101 +243,56 @@ export default function DatasetVisualization() {
       {/* Datasets Grid */}
       {!loading && datasets.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {datasets.map((dataset) => (
-            <div
-              key={dataset.id}
-              className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
-            >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900 truncate">
-                    {dataset.name}
-                  </h3>
-                  {dataset.is_owner && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      Owner
-                    </span>
-                  )}
-                </div>
-                
-                <p className="text-sm text-gray-600 mb-4 line-clamp-3">
-                  {getCleanDescription(dataset.description)}
-                </p>
-                
-                <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                  <span>👤 {dataset.author}</span>
-                  <span>📅 {dataset.last_modified_formatted}</span>
-                </div>
-                
-                <div className="flex items-center justify-between text-sm mb-4">
-                  <span className="text-gray-600">
-                    📥 {formatNumber(dataset.downloads)} downloads
-                  </span>
-                  <span className="text-gray-600">
-                    ❤️ {formatNumber(dataset.likes)} likes
-                  </span>
-                </div>
-                
-                {dataset.size_formatted && (
-                  <div className="flex items-center justify-between text-sm mb-4">
-                    <span className="text-gray-600">
-                      📊 {dataset.size_formatted}
-                    </span>
-                    <span className="text-gray-600">
-                      🏷️ {dataset.tags.length} tags
-                    </span>
+          {datasets
+            .filter(dataset => dataset.tags.includes('LeRobot'))
+            .map((dataset) => (
+              <div
+                key={dataset.id}
+                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
+              >
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 truncate">
+                      {dataset.name}
+                    </h3>
                   </div>
-                )}
-                
-                {!dataset.size_formatted && (
-                  <div className="flex items-center justify-end text-sm mb-4">
-                    <span className="text-gray-600">
-                      🏷️ {dataset.tags.length} tags
-                    </span>
+                  
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-500">📅 {dataset.last_modified_formatted}</span>
                   </div>
-                )}
-                
-                {dataset.tags.length > 0 && (
-                  <div className="mb-4">
-                    <div className="flex flex-wrap gap-1">
-                      {dataset.tags.slice(0, 3).map((tag, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {dataset.tags.length > 3 && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                          +{dataset.tags.length - 3} more
-                        </span>
-                      )}
+                  
+                  {dataset.size_formatted && (
+                    <div className="text-sm text-gray-500 mb-3">
+                      Size: {dataset.size_formatted}
                     </div>
+                  )}
+                  
+                  <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                    <span>{formatNumber(dataset.downloads)} downloads</span>
+                    <span>{formatNumber(dataset.likes)} likes</span>
                   </div>
-                )}
-                
-                <div className="flex gap-2">
-                  <a
-                    href={`https://huggingface.co/spaces/lerobot/visualize_dataset?path=%2F${dataset.author}%2F${dataset.name}%2Fepisode_0`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 text-center"
-                  >
-                    Visualize
-                  </a>
-                  <a
-                    href={`https://huggingface.co/datasets/${dataset.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200"
-                  >
-                    Open
-                  </a>
+                  
+                  <div className="flex gap-2">
+                    <a
+                      href={`https://huggingface.co/spaces/lerobot/visualize_dataset?path=%2F${dataset.author}%2F${dataset.name}%2Fepisode_0`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 text-center"
+                    >
+                      Visualize
+                    </a>
+                    <a
+                      href={`https://huggingface.co/datasets/${dataset.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 text-center"
+                    >
+                      Open
+                    </a>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
