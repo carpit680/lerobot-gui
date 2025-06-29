@@ -1,7 +1,7 @@
 {
-  "name": "lerobot-dashboard",
+  "name": "lerobot-gui",
   "version": "1.0.0",
-  "description": "Dashboard for Hugging Face LeRobot Framework",
+  "description": "GUI for Hugging Face LeRobot Framework",
   "private": true,
   "scripts": {
     "dev": "vite",

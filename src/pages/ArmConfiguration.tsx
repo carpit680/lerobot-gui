@@ -21,7 +21,7 @@ const robotTypes = [
   { value: 'giraffe_follower', label: 'Giraffe v1.1 Follower' },
 ]
 
-export default function ArmConfiguration() {
+export default function Configuration() {
   const location = useLocation()
   const { armConfig, setArmConfig, cameras, setCameras, toggleCamera, hfUser, setHfUser, hfToken, setHfToken } = useLeRobotStore()
   const [usbPorts, setUsbPorts] = useState<UsbPort[]>([])
@@ -47,7 +47,7 @@ export default function ArmConfiguration() {
   const [followerRobotIdInput, setFollowerRobotIdInput] = useState(armConfig.followerRobotId)
   const leaderRobotIdTimeoutRef = useRef<number | null>(null)
   const followerRobotIdTimeoutRef = useRef<number | null>(null)
-  const isOnArmConfigPage = useRef(true)
+  const isOnConfigPage = useRef(true)
   const streamingCamerasRef = useRef(streamingCameras)
 
   useEffect(() => {
@@ -409,17 +409,17 @@ export default function ArmConfiguration() {
 
     // Cleanup function that runs when component unmounts
     return () => {
-      console.log('Arm Configuration component unmounting, stopping camera streams')
+      console.log('Configuration component unmounting, stopping camera streams')
       window.removeEventListener('beforeunload', handleBeforeUnload)
       stopAllCameraStreams()
     }
   }, [])
 
-  // Track when we're on the arm configuration page
+  // Track when we're on the configuration page
   useEffect(() => {
-    isOnArmConfigPage.current = true
+    isOnConfigPage.current = true
     return () => {
-      isOnArmConfigPage.current = false
+      isOnConfigPage.current = false
     }
   }, [])
 
@@ -428,7 +428,7 @@ export default function ArmConfiguration() {
   }, [streamingCameras])
 
   useEffect(() => {
-    if (location.pathname !== '/arm-configuration') {
+    if (location.pathname !== '/configuration') {
       stopAllCameraStreams()
     }
   }, [location.pathname])
@@ -436,9 +436,9 @@ export default function ArmConfiguration() {
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 font-heading">Arm Configuration</h1>
+        <h1 className="text-3xl font-bold text-gray-900 font-heading">Configuration</h1>
         <p className="mt-2 text-gray-600">
-          Configure the ports for your leader and follower robot arms
+          Configure robot arms, cameras, and system settings
         </p>
       </div>
 
@@ -483,10 +483,10 @@ export default function ArmConfiguration() {
         </div>
       </div>
 
-      {/* Arm Configuration Section */}
+      {/* Robot Configuration Section */}
       <div className="mt-8">
         <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Arm Configuration</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Robot Configuration</h3>
           <div className="space-y-4">
             <div className="flex justify-end">
               <button

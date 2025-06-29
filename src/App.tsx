@@ -1,8 +1,7 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
 import Sidebar from './components/Sidebar'
-import Dashboard from './pages/Dashboard'
-import ArmConfiguration from './pages/ArmConfiguration'
+import Configuration from './pages/ArmConfiguration'
 import Calibration from './pages/Calibration'
 import Teleoperation from './pages/Teleoperation'
 import DatasetRecording from './pages/DatasetRecording'
@@ -32,8 +31,8 @@ function App() {
             <main className="flex-1 flex justify-center">
               <div className="w-full max-w-7xl">
                 <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/arm-configuration" element={<ArmConfiguration />} />
+                  <Route path="/" element={<Navigate to="/configuration" replace />} />
+                  <Route path="/configuration" element={<Configuration />} />
                   <Route path="/calibration" element={<Calibration />} />
                   <Route path="/teleoperation" element={<Teleoperation />} />
                   <Route path="/dataset-recording" element={<DatasetRecording />} />

@@ -2,7 +2,6 @@ import { Fragment } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { Link, useLocation } from 'react-router-dom'
 import {
-  HomeIcon,
   CogIcon,
   WrenchScrewdriverIcon,
   VideoCameraIcon,
@@ -16,8 +15,7 @@ import {
 import { useLeRobotStore } from '../store/lerobotStore'
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Arm Configuration', href: '/arm-configuration', icon: CogIcon },
+  { name: 'Configuration', href: '/configuration', icon: CogIcon },
   { name: 'Calibration', href: '/calibration', icon: WrenchScrewdriverIcon },
   { name: 'Teleoperation', href: '/teleoperation', icon: VideoCameraIcon },
   { name: 'Dataset Recording', href: '/dataset-recording', icon: DocumentTextIcon },

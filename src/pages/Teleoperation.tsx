@@ -103,11 +103,11 @@ export default function Teleoperation() {
       return
     }
     if (!leaderType || !followerType) {
-      toast.error('Please configure robot types for both arms in Arm Configuration')
+      toast.error('Please configure robot types for both arms in Configuration')
       return
     }
     if (!leaderId || !followerId) {
-      toast.error('Please configure robot IDs for both arms in Arm Configuration')
+      toast.error('Please configure robot IDs for both arms in Configuration')
       return
     }
     if (backendConnected !== true) {
@@ -284,7 +284,7 @@ export default function Teleoperation() {
               <h4 className="text-md font-medium text-gray-800 mb-3 border-b pb-2">Cameras</h4>
               <div className="space-y-2">
                 {cameras.filter(c => c.enabled).length === 0 ? (
-                  <p className="text-sm text-gray-500">No enabled cameras found. Configure cameras in Arm Configuration.</p>
+                  <p className="text-sm text-gray-500">No enabled cameras found. Configure cameras in Configuration.</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
                     {cameras.filter(c => c.enabled).map(camera => (

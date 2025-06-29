@@ -23,8 +23,7 @@ describe('Sidebar', () => {
         <Sidebar open={true} setOpen={setOpen} isCollapsed={false} setIsCollapsed={setIsCollapsed} />
       </MemoryRouter>
     );
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
-    expect(screen.getByText('Arm Configuration')).toBeInTheDocument();
+    expect(screen.getByText('Configuration')).toBeInTheDocument();
     expect(screen.getByText('Calibration')).toBeInTheDocument();
     expect(screen.getByText('Teleoperation')).toBeInTheDocument();
     expect(screen.getByText('Dataset Recording')).toBeInTheDocument();

@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "openbot-backend"
 version = "0.1.0"
-description = "Backend for OpenBot Dashboard"
+description = "Backend for OpenBot GUI"
 authors = ["OpenBot Team"]
 readme = "README.md"
 package-mode = false

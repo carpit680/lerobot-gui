@@ -1,10 +1,10 @@
-# LeRobot Dashboard
+# LeRobot GUI
 
-A comprehensive web-based dashboard for the Hugging Face LeRobot framework, providing an intuitive interface for robot arm control, dataset management, and model training.
+A comprehensive web-based interface for the Hugging Face LeRobot framework, providing an intuitive interface for robot arm control, dataset management, and model training.
 
 ## Features
 
-### 🤖 Arm Configuration
+### ⚙️ Configuration
 - Configure leader and follower arm ports
 - **Robot Type Selection**: Choose from supported robot types (SO-100, Giraffe v1.1)
 - **Robot ID Assignment**: Set unique identifiers for each arm
@@ -16,6 +16,8 @@ A comprehensive web-based dashboard for the Hugging Face LeRobot framework, prov
   - Automatic loading from system environment variables (`HF_USER` and `HUGGINGFACE_TOKEN`)
   - Secure token storage in application state
   - Visual indicators when credentials are loaded from environment
+- **Camera Configuration**: Multi-camera setup and management
+- **Motor Configuration**: Motor setup and calibration tools
 
 ### 🔧 Calibration
 - Step-by-step calibration process for both arms
@@ -80,7 +82,7 @@ A comprehensive web-based dashboard for the Hugging Face LeRobot framework, prov
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd lerobot-dashboard
+cd lerobot-gui
 ```
 
 2. Install dependencies:
@@ -110,14 +112,13 @@ src/
 ├── components/          # Reusable UI components
 │   └── Sidebar.tsx     # Navigation sidebar
 ├── pages/              # Page components
-│   ├── Dashboard.tsx           # Main dashboard
-│   ├── ArmConfiguration.tsx    # Arm setup and configuration
-│   ├── Calibration.tsx         # Arm calibration
-│   ├── Teleoperation.tsx       # Manual arm control
-│   ├── DatasetRecording.tsx    # Dataset recording interface
+│   ├── Configuration.tsx        # System configuration
+│   ├── Calibration.tsx          # Arm calibration
+│   ├── Teleoperation.tsx        # Manual arm control
+│   ├── DatasetRecording.tsx     # Dataset recording interface
 │   ├── DatasetVisualization.tsx # Dataset analysis
-│   ├── DatasetReplay.tsx       # Dataset replay
-│   └── ModelTraining.tsx       # Model training interface
+│   ├── DatasetReplay.tsx        # Dataset replay
+│   └── ModelTraining.tsx        # Model training interface
 ├── store/              # State management
 │   └── lerobotStore.tsx # Zustand store
 ├── App.tsx             # Main app component
@@ -127,8 +128,8 @@ src/
 
 ## Usage
 
-### 1. Arm Configuration
-- Navigate to "Arm Configuration"
+### 1. Configuration
+- Navigate to "Configuration"
 - **Hugging Face Credentials** (optional):
   - Credentials are automatically loaded from system environment variables if available
   - Manually enter your Hugging Face username and access token if needed
@@ -137,6 +138,13 @@ src/
   - Select appropriate ports for leader and follower arms
   - Choose robot type from the dropdown (SO-100 or Giraffe v1.1)
   - Assign unique robot IDs for each arm (e.g., "leader_001", "follower_001")
+- **Camera Configuration**:
+  - Scan for available cameras
+  - Configure camera settings (resolution, FPS)
+  - Enable/disable cameras and streaming
+- **Motor Configuration**:
+  - Run motor setup for selected arms
+  - Configure motor parameters
 - Test connections
 - Verify both arms are connected before proceeding
 
@@ -181,7 +189,7 @@ src/
 ## Configuration
 
 ### Camera Setup
-The dashboard supports multiple camera feeds. Configure cameras in the store:
+The interface supports multiple camera feeds. Configure cameras in the store:
 
 ```typescript
 cameras: [
@@ -198,64 +206,43 @@ Default ports can be modified in the store:
 armConfig: {
   leaderPort: '/dev/ttyUSB0',
   followerPort: '/dev/ttyUSB1',
-  // ...
 }
 ```
 
-### Environment Variables
-The dashboard can automatically load Hugging Face credentials from system environment variables:
+### Hugging Face Credentials
+The interface can automatically load Hugging Face credentials from system environment variables:
 
 ```bash
-# Set in your shell profile (.bashrc, .zshrc, etc.)
-export HF_USER="your_huggingface_username"
-export HUGGINGFACE_TOKEN="your_huggingface_access_token"
+export HF_USER="your_username"
+export HUGGINGFACE_TOKEN="your_access_token"
 ```
 
-These credentials will be automatically loaded when you visit the Arm Configuration page and can be manually overridden if needed.
-
-**Note:** The backend reads these environment variables and provides them to the frontend securely. The frontend stores them in application state for use across all pages.
+These credentials are used for:
+- Dataset upload to Hugging Face Hub
+- Model repository management
+- Dataset discovery and visualization
+- Model training with HF integration
 
 ## Development
 
-### Adding New Features
-1. Create new components in `src/components/`
-2. Add new pages in `src/pages/`
-3. Update the store in `src/store/lerobotStore.tsx`
-4. Add routing in `src/App.tsx`
+### Running Tests
+```bash
+npm test
+```
 
-### Styling
-The project uses Tailwind CSS with custom components defined in `src/index.css`.
-
-### State Management
-All application state is managed through Zustand in `src/store/lerobotStore.tsx`.
+### Code Quality
+```bash
+npm run lint
+```
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
+4. Add tests for new functionality
 5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Support
-
-For issues and questions:
-- Check the troubleshooting sections in each page
-- Review the console for error messages
-- Ensure all prerequisites are met
-- Verify hardware connections
-
-## Roadmap
-
-- [ ] Real-time 3D visualization
-- [ ] Advanced model architectures
-- [ ] Cloud integration
-- [ ] Multi-user support
-- [ ] API documentation
-- [ ] Plugin system
-- [ ] Mobile app
-- [ ] Offline mode 
+This project is licensed under the MIT License - see the LICENSE file for details. 

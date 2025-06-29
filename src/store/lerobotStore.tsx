@@ -43,7 +43,7 @@ export interface TrainingConfig {
 }
 
 export interface LeRobotState {
-  // Arm Configuration
+  // Configuration
   armConfig: ArmConfig
   setArmConfig: (config: Partial<ArmConfig>) => void
   
@@ -84,7 +84,7 @@ export interface LeRobotState {
 }
 
 export const useLeRobotStore = create<LeRobotState>((set) => ({
-  // Arm Configuration
+  // Configuration
   armConfig: {
     leaderPort: '/dev/ttyUSB0',
     followerPort: '/dev/ttyUSB1',

@@ -290,7 +290,7 @@ export default function ModelTraining() {
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
                 <p>
-                  Please configure your Hugging Face username in the Arm Configuration page to start model training.
+                  Please configure your Hugging Face username in the Configuration page to start model training.
                 </p>
               </div>
             </div>

@@ -50,11 +50,11 @@ export default function DatasetReplay() {
       return
     }
     if (!robotType) {
-      toast.error('Please configure robot type in Arm Configuration')
+      toast.error('Please configure robot type in Configuration')
       return
     }
     if (!robotId) {
-      toast.error('Please configure robot ID in Arm Configuration')
+      toast.error('Please configure robot ID in Configuration')
       return
     }
     if (backendConnected !== true) {

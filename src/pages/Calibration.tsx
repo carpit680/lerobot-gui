@@ -178,22 +178,22 @@ export default function Calibration() {
 
   const startCalibration = async () => {
     if (!currentPort) {
-      toast.error(`Please configure ${selectedArm} arm port in Arm Configuration`)
+      toast.error(`Please configure ${selectedArm} arm port in Configuration`)
       return
     }
 
     if (!robotType) {
-      toast.error(`Please configure ${selectedArm} arm robot type in Arm Configuration`)
+      toast.error(`Please configure ${selectedArm} arm robot type in Configuration`)
       return
     }
 
     if (!robotId) {
-      toast.error(`Please configure ${selectedArm} arm robot ID in Arm Configuration`)
+      toast.error(`Please configure ${selectedArm} arm robot ID in Configuration`)
       return
     }
 
     if (!selectedRobotType) {
-      toast.error(`Robot type "${baseRobotType}" is not supported. Please configure a supported robot type in Arm Configuration`)
+      toast.error(`Robot type "${baseRobotType}" is not supported. Please configure a supported robot type in Configuration`)
       return
     }
 
@@ -731,7 +731,7 @@ export default function Calibration() {
                 {robotType}
               </div>
               <p className="text-sm text-gray-600 mt-1">
-                From Arm Configuration
+                From Configuration
               </p>
             </div>
 
@@ -744,7 +744,7 @@ export default function Calibration() {
                 {robotId}
               </div>
               <p className="text-sm text-gray-600 mt-1">
-                From Arm Configuration
+                From Configuration
               </p>
             </div>
           </div>
@@ -760,7 +760,7 @@ export default function Calibration() {
               <div>
                 <h3 className="text-lg font-semibold text-red-800 font-heading">Port Not Configured</h3>
                 <p className="text-red-700">
-                  Please configure the {selectedArm} arm port in the Arm Configuration page before starting calibration.
+                  Please configure the {selectedArm} arm port in the Configuration page before starting calibration.
                 </p>
               </div>
             </div>

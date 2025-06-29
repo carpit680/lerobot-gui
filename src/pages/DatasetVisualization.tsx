@@ -48,7 +48,7 @@ export default function DatasetVisualization() {
 
   const fetchDatasets = async (query?: string) => {
     if (!hfUser) {
-      setError('Hugging Face username not found. Please configure it in Arm Configuration.')
+      setError('Hugging Face username not found. Please configure it in Configuration.')
       return
     }
 
@@ -162,7 +162,7 @@ export default function DatasetVisualization() {
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
                 <p>
-                  Please configure your Hugging Face username in the Arm Configuration page to view your datasets.
+                  Please configure your Hugging Face username in the Configuration page to view your datasets.
                 </p>
               </div>
             </div>
