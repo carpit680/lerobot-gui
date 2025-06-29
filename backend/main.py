@@ -12,6 +12,7 @@ from backend.dataset_visualization_service import dataset_visualization_service 
 from backend.motor_setup_service import MotorSetupService
 from backend.teleoperation_service import teleoperation_service as teleoperation_service_instance
 from backend.model_training_service import training_service, TrainingConfig
+from backend.env_manager import set_hf_credentials, get_hf_credentials, get_hf_env_for_cli
 import cv2
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import Response
@@ -1000,20 +1001,34 @@ async def get_dataset_details(request: DatasetDetailsRequest):
 @app.get("/env/huggingface")
 async def get_huggingface_env():
     """
-    Get Hugging Face environment variables from the system
+    Get Hugging Face environment variables from the system and stored credentials
     """
     try:
-        hf_user = os.environ.get('HF_USER', '')
-        hf_token = os.environ.get('HUGGINGFACE_TOKEN', '')
+        return get_hf_credentials()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get environment variables: {str(e)}")
+
+@app.post("/env/huggingface")
+async def set_huggingface_env(request: Request):
+    """
+    Set Hugging Face environment variables for CLI commands
+    """
+    try:
+        data = await request.json()
+        hf_user = data.get('hf_user', '')
+        hf_token = data.get('hf_token', '')
+        
+        # Set credentials using env_manager
+        set_hf_credentials(hf_user, hf_token)
         
         return {
-            "hf_user": hf_user,
-            "hf_token": hf_token,
+            "success": True,
+            "message": "Hugging Face credentials set successfully",
             "has_user": bool(hf_user),
             "has_token": bool(hf_token)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get environment variables: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to set environment variables: {str(e)}")
 
 @app.post("/model-training/start")
 async def start_training(request: TrainingConfigRequest):

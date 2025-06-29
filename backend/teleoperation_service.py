@@ -11,6 +11,9 @@ import json
 import re
 import sys
 
+# Import the function to get HF environment variables
+from backend.env_manager import get_hf_env_for_cli
+
 logger = logging.getLogger(__name__)
 
 class TeleoperationService:
@@ -118,6 +121,9 @@ class TeleoperationService:
             # Use PTY for better interactive output handling
             master_fd, slave_fd = pty.openpty()
 
+            # Get environment variables for CLI commands
+            cli_env = get_hf_env_for_cli()
+
             process = subprocess.Popen(
                 command,
                 stdout=slave_fd,
@@ -127,7 +133,8 @@ class TeleoperationService:
                 env=dict(os.environ, 
                         PYTHONUNBUFFERED="1",  # Force Python to be unbuffered
                         TERM="xterm-256color",  # Set terminal type
-                        FORCE_COLOR="1")  # Force color output
+                        FORCE_COLOR="1",  # Force color output
+                        **cli_env)  # Add Hugging Face credentials
             )
 
             os.close(slave_fd)

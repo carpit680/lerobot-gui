@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from datetime import datetime
 import re
 
+# Import the function to get HF environment variables
+from backend.env_manager import get_hf_env_for_cli
+
 @dataclass
 class TrainingConfig:
     dataset_repo_id: str
@@ -64,6 +67,10 @@ class ModelTrainingService:
             env = os.environ.copy()
             if token:
                 env["HF_TOKEN"] = token
+            
+            # Get Hugging Face environment variables for CLI commands
+            cli_env = get_hf_env_for_cli()
+            env.update(cli_env)
 
             print(f"Starting training with command: {' '.join(cmd)}")
 

@@ -9,6 +9,9 @@ import subprocess
 from datetime import datetime
 import sys
 
+# Import the function to get HF environment variables
+from backend.env_manager import get_hf_env_for_cli
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,9 @@ class CalibrationService:
             # Create a PTY
             master_fd, slave_fd = pty.openpty()
             
+            # Get environment variables for CLI commands
+            cli_env = get_hf_env_for_cli()
+            
             # Start the process with PTY
             process = subprocess.Popen(
                 command,
@@ -107,7 +113,8 @@ class CalibrationService:
                 env=dict(os.environ, 
                         PYTHONUNBUFFERED="1",  # Force Python to be unbuffered
                         TERM="xterm-256color",  # Set terminal type
-                        FORCE_COLOR="1")  # Force color output
+                        FORCE_COLOR="1",  # Force color output
+                        **cli_env)  # Add Hugging Face credentials
             )
             
             # Close the slave fd in the parent

@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import React from 'react'
-import Configuration from './ArmConfiguration'
+import Configuration from './Configuration'
 import * as store from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 

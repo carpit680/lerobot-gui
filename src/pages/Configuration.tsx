@@ -41,6 +41,7 @@ export default function Configuration() {
   const [motorConfigSessionId, setMotorConfigSessionId] = useState<string | null>(null);
   const [isSendingMotorInput, setIsSendingMotorInput] = useState(false);
   const [envLoaded, setEnvLoaded] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
 
   // Debounced robot ID states
   const [leaderRobotIdInput, setLeaderRobotIdInput] = useState(armConfig.leaderRobotId)
@@ -58,9 +59,26 @@ export default function Configuration() {
   useEffect(() => {
     const fetchHfEnv = async () => {
       try {
+        // First check if backend is running
+        console.log('Checking backend connectivity...')
+        const healthResponse = await fetch('http://localhost:8000/health')
+        if (!healthResponse.ok) {
+          console.warn(`Backend health check failed: ${healthResponse.status} ${healthResponse.statusText}`)
+          setBackendStatus('disconnected')
+          setEnvLoaded(true)
+          return
+        }
+        console.log('Backend is running, fetching Hugging Face credentials...')
+        setBackendStatus('connected')
+
         const response = await fetch('http://localhost:8000/env/huggingface')
         if (response.ok) {
           const data = await response.json()
+          console.log('Hugging Face credentials fetched successfully:', { 
+            has_user: !!data.hf_user, 
+            has_token: !!data.hf_token,
+            source: data.source 
+          })
           // Only update if we don't already have values set
           if (data.hf_user && !hfUser) {
             setHfUser(data.hf_user)
@@ -69,15 +87,74 @@ export default function Configuration() {
             setHfToken(data.hf_token)
           }
           setEnvLoaded(true)
+        } else {
+          console.warn(`Failed to fetch Hugging Face environment variables: ${response.status} ${response.statusText}`)
+          setEnvLoaded(true) // Mark as loaded even if failed
         }
       } catch (error) {
         console.warn('Failed to fetch Hugging Face environment variables:', error)
+        setBackendStatus('disconnected')
         setEnvLoaded(true) // Mark as loaded even if failed
       }
     }
     
     fetchHfEnv()
   }, [hfUser, hfToken, setHfUser, setHfToken])
+
+  // Function to set Hugging Face environment variables in backend
+  const setHfEnvInBackend = async (user: string, token: string) => {
+    try {
+      const response = await fetch('http://localhost:8000/env/huggingface', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          hf_user: user,
+          hf_token: token
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          toast.success('Hugging Face credentials set for CLI commands')
+        } else {
+          toast.error('Failed to set credentials')
+        }
+      } else {
+        console.error(`Failed to set credentials: ${response.status} ${response.statusText}`)
+        toast.error(`Failed to set credentials: ${response.status}`)
+      }
+    } catch (error) {
+      console.error('Error setting Hugging Face environment variables:', error)
+      toast.error('Failed to set credentials')
+    }
+  }
+
+  // Debounced function to set environment variables
+  const debouncedSetEnv = useRef<NodeJS.Timeout | null>(null)
+
+  // Effect to set environment variables when credentials change
+  useEffect(() => {
+    if (envLoaded && (hfUser || hfToken)) {
+      // Clear existing timeout
+      if (debouncedSetEnv.current) {
+        clearTimeout(debouncedSetEnv.current)
+      }
+      
+      // Set new timeout to avoid too many API calls
+      debouncedSetEnv.current = setTimeout(() => {
+        setHfEnvInBackend(hfUser, hfToken)
+      }, 1000)
+    }
+    
+    return () => {
+      if (debouncedSetEnv.current) {
+        clearTimeout(debouncedSetEnv.current)
+      }
+    }
+  }, [hfUser, hfToken, envLoaded])
 
   // Cleanup: Stop all camera streams on unmount
   useEffect(() => {
@@ -440,6 +517,28 @@ export default function Configuration() {
         <p className="mt-2 text-gray-600">
           Configure robot arms, cameras, and system settings
         </p>
+        
+        {/* Backend Status Indicator */}
+        <div className="mt-4 flex items-center gap-2">
+          <div className={`w-3 h-3 rounded-full ${
+            backendStatus === 'connected' ? 'bg-green-500' : 
+            backendStatus === 'disconnected' ? 'bg-red-500' : 'bg-yellow-500'
+          }`}></div>
+          <span className={`text-sm font-medium ${
+            backendStatus === 'connected' ? 'text-green-700' : 
+            backendStatus === 'disconnected' ? 'text-red-700' : 'text-yellow-700'
+          }`}>
+            Backend: {
+              backendStatus === 'connected' ? 'Connected' : 
+              backendStatus === 'disconnected' ? 'Disconnected' : 'Checking...'
+            }
+          </span>
+          {backendStatus === 'disconnected' && (
+            <span className="text-xs text-red-600">
+              (Make sure backend server is running on port 8000)
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Hugging Face Credentials Section */}

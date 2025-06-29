@@ -9,6 +9,9 @@ import pty
 import select
 import time
 
+# Import the function to get HF environment variables
+from backend.env_manager import get_hf_env_for_cli
+
 class MotorSetupService:
     def __init__(self):
         self.active_sessions = {}   # session_id -> session_data
@@ -38,13 +41,21 @@ class MotorSetupService:
             ]
             logging.info(f"Executing motor setup command: {' '.join(command)}")
             master_fd, slave_fd = pty.openpty()
+            
+            # Get environment variables for CLI commands
+            cli_env = get_hf_env_for_cli()
+            
             process = subprocess.Popen(
                 command,
                 stdout=slave_fd,
                 stderr=slave_fd,
                 stdin=slave_fd,
                 close_fds=True,
-                env=dict(os.environ, PYTHONUNBUFFERED="1", TERM="xterm-256color", FORCE_COLOR="1")
+                env=dict(os.environ, 
+                        PYTHONUNBUFFERED="1", 
+                        TERM="xterm-256color", 
+                        FORCE_COLOR="1",
+                        **cli_env)  # Add Hugging Face credentials
             )
             os.close(slave_fd)
             self.active_processes[session_id] = (process, master_fd)

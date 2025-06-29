@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
 import Sidebar from './components/Sidebar'
-import Configuration from './pages/ArmConfiguration'
+import Configuration from './pages/Configuration'
 import Calibration from './pages/Calibration'
 import Teleoperation from './pages/Teleoperation'
 import DatasetRecording from './pages/DatasetRecording'

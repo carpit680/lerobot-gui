@@ -273,7 +273,7 @@ lerobot-gui/
 ├── src/                      # React frontend
 │   ├── components/           # Reusable UI components
 │   ├── pages/               # Page components
-│   │   ├── ArmConfiguration.tsx
+│   │   ├── Configuration.tsx
 │   │   ├── Calibration.tsx
 │   │   ├── Teleoperation.tsx
 │   │   ├── DatasetRecording.tsx
