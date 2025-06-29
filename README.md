@@ -363,4 +363,5 @@ lerobot-gui/
 
 For issues and questions:
 - Check the troubleshooting section
+- Check API Docs here: `http://localhost:8000/docs`
 - Open an issue on the repository 
