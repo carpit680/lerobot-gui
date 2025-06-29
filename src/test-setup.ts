@@ -8,7 +8,6 @@ expect.extend(matchers);
 
 // Declare global types for testing
 declare global {
-  var fetch: any;
   namespace Vi {
     interface JestAssertion<T = any> extends matchers.TestingLibraryMatchers<T, void> {}
   }
