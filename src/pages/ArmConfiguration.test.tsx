@@ -1,14 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import Configuration from './Configuration'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import React from 'react'
+import Configuration from './ArmConfiguration'
 import * as store from '../store/lerobotStore'
 import { toast } from 'react-hot-toast'
 
 // Mock dependencies
-jest.mock('react-hot-toast')
-jest.mock('../store/lerobotStore')
-
-const mockToast = toast as jest.Mocked<typeof toast>
+vi.mock('react-hot-toast')
+vi.mock('../store/lerobotStore')
 
 describe('Configuration', () => {
   const mockStore = {
@@ -22,22 +22,22 @@ describe('Configuration', () => {
       leaderRobotId: 'leader_001',
       followerRobotId: 'follower_001',
     },
-    setArmConfig: jest.fn(),
+    setArmConfig: vi.fn(),
     cameras: [],
-    setCameras: jest.fn(),
-    toggleCamera: jest.fn(),
+    setCameras: vi.fn(),
+    toggleCamera: vi.fn(),
     hfUser: 'testuser',
-    setHfUser: jest.fn(),
+    setHfUser: vi.fn(),
     hfToken: 'testtoken',
-    setHfToken: jest.fn(),
+    setHfToken: vi.fn(),
   }
 
   beforeEach(() => {
-    jest.clearAllMocks()
-    ;(store.useLeRobotStore as jest.Mock).mockReturnValue(mockStore)
+    vi.clearAllMocks()
+    ;(store.useLeRobotStore as any).mockReturnValue(mockStore)
     
-    // Mock fetch
-    global.fetch = jest.fn()
+    // Mock fetch using window object instead of global
+    ;(window as any).fetch = vi.fn()
   })
 
   it('renders Configuration page with title', () => {
@@ -46,7 +46,8 @@ describe('Configuration', () => {
         <Configuration />
       </MemoryRouter>
     )
-    expect(screen.getByRole('heading', { level: 1, name: 'Configuration' })).toBeInTheDocument()
+    const title = screen.getByRole('heading', { level: 1, name: 'Configuration' })
+    expect(title).toBeDefined()
   })
 
   it('renders Hugging Face credentials section', () => {
@@ -55,9 +56,13 @@ describe('Configuration', () => {
         <Configuration />
       </MemoryRouter>
     )
-    expect(screen.getByRole('heading', { level: 3, name: 'Hugging Face Credentials' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Hugging Face Username')).toBeInTheDocument()
-    expect(screen.getByLabelText('Access Token')).toBeInTheDocument()
+    const credentialsHeading = screen.getByRole('heading', { level: 3, name: 'Hugging Face Credentials' })
+    const usernameInput = screen.getByLabelText('Hugging Face Username')
+    const tokenInput = screen.getByLabelText('Access Token')
+    
+    expect(credentialsHeading).toBeDefined()
+    expect(usernameInput).toBeDefined()
+    expect(tokenInput).toBeDefined()
   })
 
   it('renders robot configuration section', () => {
@@ -66,9 +71,13 @@ describe('Configuration', () => {
         <Configuration />
       </MemoryRouter>
     )
-    expect(screen.getByRole('heading', { level: 3, name: 'Robot Configuration' })).toBeInTheDocument()
-    expect(screen.getByText('Leader Arm')).toBeInTheDocument()
-    expect(screen.getByText('Follower Arm')).toBeInTheDocument()
+    const robotHeading = screen.getByRole('heading', { level: 3, name: 'Robot Configuration' })
+    const leaderArm = screen.getByText('Leader Arm')
+    const followerArm = screen.getByText('Follower Arm')
+    
+    expect(robotHeading).toBeDefined()
+    expect(leaderArm).toBeDefined()
+    expect(followerArm).toBeDefined()
   })
 
   it('renders camera configuration section', () => {
@@ -77,8 +86,11 @@ describe('Configuration', () => {
         <Configuration />
       </MemoryRouter>
     )
-    expect(screen.getByRole('heading', { level: 3, name: 'Camera Configuration' })).toBeInTheDocument()
-    expect(screen.getByText('Scan Cameras')).toBeInTheDocument()
+    const cameraHeading = screen.getByRole('heading', { level: 3, name: 'Camera Configuration' })
+    const scanButton = screen.getByText('Scan Cameras')
+    
+    expect(cameraHeading).toBeDefined()
+    expect(scanButton).toBeDefined()
   })
 
   it('renders motor configuration section', () => {
@@ -87,8 +99,11 @@ describe('Configuration', () => {
         <Configuration />
       </MemoryRouter>
     )
-    expect(screen.getByRole('heading', { level: 3, name: 'Motor Configuration' })).toBeInTheDocument()
-    expect(screen.getByText('Run Motor Setup')).toBeInTheDocument()
+    const motorHeading = screen.getByRole('heading', { level: 3, name: 'Motor Configuration' })
+    const runButton = screen.getByText('Run Motor Setup')
+    
+    expect(motorHeading).toBeDefined()
+    expect(runButton).toBeDefined()
   })
 
   it('handles Hugging Face username change', () => {
@@ -124,11 +139,12 @@ describe('Configuration', () => {
       </MemoryRouter>
     )
     
-    expect(screen.getByText('✓ Loaded from system environment variables')).toBeInTheDocument()
+    const indicator = screen.getByText('✓ Loaded from system environment variables')
+    expect(indicator).toBeDefined()
   })
 
   it('handles port scanning', async () => {
-    const mockFetch = global.fetch as jest.Mock
+    const mockFetch = (window as any).fetch as any
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ports: ['/dev/ttyUSB0', '/dev/ttyUSB1'] })
@@ -149,7 +165,7 @@ describe('Configuration', () => {
   })
 
   it('handles camera scanning', async () => {
-    const mockFetch = global.fetch as jest.Mock
+    const mockFetch = (window as any).fetch as any
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ cameras: [{ name: 'Test Camera', width: 1920, height: 1080, fps: 30 }] })
@@ -176,7 +192,8 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByRole('heading', { level: 3, name: 'Robot Configuration' })).toBeInTheDocument()
+      const robotHeading = screen.getByRole('heading', { level: 3, name: 'Robot Configuration' })
+      expect(robotHeading).toBeDefined()
     })
 
     it('displays leader arm configuration', () => {
@@ -185,8 +202,11 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByText('Leader Arm')).toBeInTheDocument()
-      expect(screen.getByText('Primary control arm')).toBeInTheDocument()
+      const leaderArm = screen.getByText('Leader Arm')
+      const primaryControl = screen.getByText('Primary control arm')
+      
+      expect(leaderArm).toBeDefined()
+      expect(primaryControl).toBeDefined()
     })
 
     it('displays follower arm configuration', () => {
@@ -195,8 +215,11 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByText('Follower Arm')).toBeInTheDocument()
-      expect(screen.getByText('Secondary controlled arm')).toBeInTheDocument()
+      const followerArm = screen.getByText('Follower Arm')
+      const secondaryControl = screen.getByText('Secondary controlled arm')
+      
+      expect(followerArm).toBeDefined()
+      expect(secondaryControl).toBeDefined()
     })
   })
 
@@ -207,7 +230,8 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByRole('heading', { level: 3, name: 'Camera Configuration' })).toBeInTheDocument()
+      const cameraHeading = screen.getByRole('heading', { level: 3, name: 'Camera Configuration' })
+      expect(cameraHeading).toBeDefined()
     })
 
     it('shows scan cameras button', () => {
@@ -216,7 +240,8 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByText('Scan Cameras')).toBeInTheDocument()
+      const scanButton = screen.getByText('Scan Cameras')
+      expect(scanButton).toBeDefined()
     })
 
     it('shows no cameras message when no cameras are found', () => {
@@ -225,7 +250,8 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByText('No cameras found. Click "Scan Cameras" to detect available cameras.')).toBeInTheDocument()
+      const noCamerasMessage = screen.getByText('No cameras found. Click "Scan Cameras" to detect available cameras.')
+      expect(noCamerasMessage).toBeDefined()
     })
   })
 
@@ -236,7 +262,8 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByRole('heading', { level: 3, name: 'Motor Configuration' })).toBeInTheDocument()
+      const motorHeading = screen.getByRole('heading', { level: 3, name: 'Motor Configuration' })
+      expect(motorHeading).toBeDefined()
     })
 
     it('shows arm selection dropdown', () => {
@@ -245,7 +272,8 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByLabelText('Arm')).toBeInTheDocument()
+      const armDropdown = screen.getByLabelText('Arm')
+      expect(armDropdown).toBeDefined()
     })
 
     it('shows robot type selection dropdown', () => {
@@ -254,7 +282,8 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByLabelText('Robot Type')).toBeInTheDocument()
+      const robotTypeDropdown = screen.getByLabelText('Robot Type')
+      expect(robotTypeDropdown).toBeDefined()
     })
 
     it('shows run motor setup button', () => {
@@ -263,7 +292,8 @@ describe('Configuration', () => {
           <Configuration />
         </MemoryRouter>
       )
-      expect(screen.getByText('Run Motor Setup')).toBeInTheDocument()
+      const runButton = screen.getByText('Run Motor Setup')
+      expect(runButton).toBeDefined()
     })
   })
 }) 
